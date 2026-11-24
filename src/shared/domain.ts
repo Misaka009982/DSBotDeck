@@ -21,12 +21,34 @@ export interface SavedServer {
   unfollowed: string[]
 }
 export interface Selection { serverId: string; kind: EntityKind; id: string }
-export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null }
+export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null; skin: string | null; size: number }
+export type UiLanguage = 'zh' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'es' | 'fr' | 'de' | 'system'
+export interface AppearanceSettings {
+  language: UiLanguage
+  iconPath: string | null
+  backgroundPath: string | null
+  petLibraryPath: string | null
+  opacity: number
+  blur: number
+  fit: 'cover' | 'contain'
+}
+export interface PetSkinView { key: string; name: string; rows: number; url: string }
+export interface LocalAssetsView {
+  revision: string
+  icon: string | null
+  background: string | null
+  libraryPath: string
+  pets: { key: string; name: string; available: boolean; error: string | null }[]
+  selected: PetSkinView | null
+  warnings: string[]
+}
+export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, backgroundPath: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
 export interface SavedClient {
   version: 1
   servers: SavedServer[]
   selected: Selection | null
   pet: PetSettings
+  appearance: AppearanceSettings
   window: Bounds | null
 }
 export interface Counts { green: number; yellow: number; red: number; blue: number }
@@ -85,15 +107,16 @@ export interface Snapshot {
   activeServerId: string | null
   selected: Selection | null
   pet: PetSettings
+  appearance: AppearanceSettings
   tasks: PetTask[]
   counts: Counts
   startupError: string | null
 }
 export type ContentCommand = { action: 'chat'; kind: EntityKind; id: string } | { action: 'settings'; page?: string; id?: string } | { action: 'new-bot' | 'new-room' }
-export interface ContentStatus { cached: boolean; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null }
+export interface ContentStatus { cached: boolean; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null; localBackground?: boolean; uiLanguage?: UiLanguage }
 export const emptyCounts = (): Counts => ({ green: 0, yellow: 0, red: 0, blue: 0 })
 export const entityKey = (kind: EntityKind, id: string): string => `${kind}:${id}`
 export const defaultClient = (): SavedClient => ({
   version: 1, servers: [], selected: null,
-  pet: { enabled: false, locked: false, alwaysOnTop: true, position: null }, window: null,
+  pet: { enabled: false, locked: false, alwaysOnTop: true, position: null, skin: null, size: 112 }, appearance: defaultAppearance(), window: null,
 })

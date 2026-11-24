@@ -1,0 +1,2 @@
+/* 所有精灵只在一格范围内裁切；不改变宠物主体和控件的命中边界。 */
+.deck-sprite{display:inline-block;flex:none;background-repeat:no-repeat;vertical-align:middle;pointer-events:none}

@@ -9,4 +9,7 @@
 body[data-deck-cached] :is(.bt-panel,.bt-pane,.bt-overlay,.bt-dialog) :is(button,input,select,textarea,[role=button]){pointer-events:none;opacity:.65}
 body[data-deck-cached] *,body[data-deck-cached] *::before,body[data-deck-cached] *::after{animation-play-state:paused!important}
 body[data-deck-cached] .dsb-band{-webkit-app-region:no-drag}
+/* 仅透明化聊天底层，让父窗口的本机背景连续显示；远程页面拿不到本机图片路径。 */
+body[data-deck-background],body[data-deck-background] #root,body[data-deck-background] .dsb-main{background:transparent!important}
+body[data-deck-background] .dsb-head::before{background:none}
 @media(max-width:700px){.deck-cache-banner{padding-right:12px;padding-top:52px}}

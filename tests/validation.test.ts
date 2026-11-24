@@ -2,7 +2,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { command, frozenRequest, pairingText, relayUrl, savedClient, selection, validServerId } from '../src/shared/validation.ts'
-import { defaultClient } from '../src/shared/domain.ts'
+import { defaultAppearance, defaultClient } from '../src/shared/domain.ts'
 
 test('服务器保留字和无效目标被拒绝', () => {
   assert.equal(validServerId('shell'), false)
@@ -31,4 +31,21 @@ test('等待系统验证前冻结原请求', () => {
 test('保存格式无效时不默默重建身份', () => {
   assert.deepEqual(savedClient(defaultClient()), defaultClient())
   assert.throws(() => savedClient({ version: 1, servers: [{ id: 'server-a' }], pet: {} }), /未重建|未覆盖/)
+})
+test('旧版本本机配置补默认外观但不重置宠物或身份', () => {
+  const old = { version: 1, servers: [], selected: null, pet: { enabled: true, locked: true, alwaysOnTop: false, position: { x: 20, y: 30 } }, window: null }
+  const loaded = savedClient(old)
+  assert.deepEqual(loaded.appearance, defaultAppearance())
+  assert.equal(loaded.pet.enabled, true); assert.equal(loaded.pet.locked, true)
+  assert.equal(loaded.pet.skin, null); assert.equal(loaded.pet.size, 112)
+  assert.deepEqual(loaded.pet.position, { x: 20, y: 30 })
+})
+test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
+  const client = defaultClient()
+  assert.throws(() => savedClient({ ...client, appearance: { ...client.appearance, iconPath: 'https://example/icon.png' } }))
+  assert.throws(() => savedClient({ ...client, pet: { ...client.pet, skin: '../outside' } }))
+  assert.throws(() => savedClient({ ...client, pet: { ...client.pet, size: 1000 } }))
+  assert.throws(() => savedClient({ ...client, appearance: { ...client.appearance, opacity: NaN } }))
+  assert.throws(() => savedClient({ ...client, appearance: { ...client.appearance, language: 'unsupported' } }))
+  assert.equal(savedClient({ ...client, appearance: { ...client.appearance, language: 'en' } }).appearance.language, 'en')
 })

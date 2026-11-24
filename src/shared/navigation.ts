@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 导航使用公开目录，不把 Bot 分段会话显示成独立手动列表。
-import type { Entity, ServerView, TeamView } from './domain.ts'
+import type { ContentCommand, Entity, ServerView, TeamView } from './domain.ts'
+export const settingsCommand = (entity: Pick<Entity, 'kind' | 'id'>): ContentCommand => ({ action: 'settings', page: entity.kind === 'room' ? 'groups' : 'bots', id: entity.id })
 export interface EntityGroup { id: string; label: string; entities: Entity[] }
 export function groupEntities(team: TeamView | null, search = ''): EntityGroup[] {
   if (!team) return []

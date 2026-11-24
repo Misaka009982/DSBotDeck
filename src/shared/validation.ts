@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { Bounds, ContentCommand, EntityKind, Point, SavedClient, SavedServer, Selection } from './domain.ts'
+import type { AppearanceSettings, Bounds, ContentCommand, EntityKind, Point, SavedClient, SavedServer, Selection } from './domain.ts'
+import { defaultAppearance } from './domain.ts'
 
 export const MAX_SERVERS = 32
 export const MAX_REQUEST_BYTES = 32 * 1024 * 1024
@@ -111,6 +112,27 @@ function savedServer(value: unknown): SavedServer {
     unfollowed: Array.isArray(item.unfollowed) ? item.unfollowed.filter((key): key is string => typeof key === 'string' && key.length <= 300) : [],
   }
 }
+export function localPath(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string' || value.length > 4096 || !/^[a-z]:[\\/]/i.test(value) || /[\u0000-\u001f]/.test(value) || value.slice(2).includes(':')) throw new DeckError('bot/invalid', '只能选择本机磁盘路径，不能使用网络地址或设备路径。')
+  return value
+}
+export function petSkin(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string' || value.length === 0 || value.length > 160 || value === '.' || value === '..' || /[\\/:\u0000-\u001f]/.test(value)) throw new DeckError('bot/invalid', '宠物编号无效。')
+  return value
+}
+export function savedAppearance(value: unknown): AppearanceSettings {
+  const defaults = defaultAppearance()
+  if (value === undefined) return defaults
+  const entry = record(value)
+  if (!entry) throw new DeckError('bot/invalid', 'Deck 外观设置无效。')
+  const language = entry.language ?? defaults.language
+  if (language !== 'zh' && language !== 'zh-TW' && language !== 'en' && language !== 'ja' && language !== 'ko' && language !== 'es' && language !== 'fr' && language !== 'de' && language !== 'system') throw new DeckError('bot/invalid', '界面语言无效。')
+  const opacity = entry.opacity ?? defaults.opacity; const blur = entry.blur ?? defaults.blur; const fit = entry.fit ?? defaults.fit
+  if (!finite(opacity) || opacity < 0 || opacity > 1 || !finite(blur) || blur < 0 || blur > 24 || (fit !== 'cover' && fit !== 'contain')) throw new DeckError('bot/invalid', '背景透明度、模糊或布局无效。')
+  return { language, iconPath: localPath(entry.iconPath), backgroundPath: localPath(entry.backgroundPath), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
+}
 export function savedClient(value: unknown): SavedClient {
   const item = record(value)
   const pet = record(item?.pet)
@@ -120,11 +142,13 @@ export function savedClient(value: unknown): SavedClient {
   const servers = item.servers.map(savedServer)
   if (new Set(servers.map(server => server.id)).size !== servers.length) throw new DeckError('vault/corrupt', '配置中存在重复服务器身份；未重置原文件。')
   const chosen = selection(item.selected)
+  const size = pet.size ?? 112
+  if (!finite(size) || size < 72 || size > 144) throw new DeckError('bot/invalid', '宠物显示尺寸无效。')
   return {
     version: 1, servers,
     selected: chosen && servers.some(server => server.id === chosen.serverId) ? chosen : null,
-    pet: { enabled: pet.enabled === true, locked: pet.locked === true, alwaysOnTop: pet.alwaysOnTop !== false, position: point(pet.position) },
-    window: bounds(item.window),
+    pet: { enabled: pet.enabled === true, locked: pet.locked === true, alwaysOnTop: pet.alwaysOnTop !== false, position: point(pet.position), skin: petSkin(pet.skin), size },
+    appearance: savedAppearance(item.appearance), window: bounds(item.window),
   }
 }
 export const kindOf = (value: unknown): EntityKind | null => value === 'bot' || value === 'room' ? value : null

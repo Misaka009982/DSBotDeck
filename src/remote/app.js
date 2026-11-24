@@ -9,6 +9,8 @@ import { allThemes, effectsOf, themeCss } from '@dsbot/client/themes.js'
 import { currentPart } from '@dsbot/client/text.js'
 import { Chat } from '@dsbot/ui/chat.js'
 import { createTeam } from '@dsbot/ui/team.js'
+import { settingsCommand } from '../shared/navigation.ts'
+import { useDeckLocale } from '../renderer/deck-locale.js'
 
 const bridge = window.dsbotContent
 function useTheme(prefs) {
@@ -52,9 +54,16 @@ export function App() {
   const [status, setStatus] = useState({ cached: true, alias: '远程 DS-Bot', state: 'connecting', error: null })
   const [feedLost, setFeedLost] = useState(true)
   const [packet, setPacket] = useState(null)
+  const localeReady = useDeckLocale(status.uiLanguage ?? 'zh')
   const cachedRef = useRef(true)
   cachedRef.current = status.cached || feedLost
   const views = { ...hooks, actions, useFrame, useSidebarPref: useHiddenSidebar }
+  const headerActions = { ...actions, toggleDetails: id => {
+    const target = targetOf(roster, id)
+    if (!target) return actions.toggleDetails(id)
+    const settings = settingsCommand(target)
+    actions.openSettings(settings.page, settings.id)
+  } }
   useTheme(roster.prefs)
   useEffect(() => team.start(), [team])
   useEffect(() => {
@@ -107,18 +116,23 @@ export function App() {
     document.body.toggleAttribute('data-deck-cached', cached)
     return () => document.body.removeAttribute('data-deck-cached')
   }, [cached])
+  useEffect(() => {
+    document.body.toggleAttribute('data-deck-background', status.localBackground === true)
+    return () => document.body.removeAttribute('data-deck-background')
+  }, [status.localBackground])
   const closeOverlays = error => {
     actions.closeSettings(); actions.closeMemory(); actions.closeMenu(); actions.closePanel(); actions.closePalette(); actions.closeVoice(); actions.closeOverlay()
     actions.reportError(error, 'overlay')
   }
   const visibleShown = shown && (roster.byId[shown] || roster.roomsById[shown]) ? shown : null
+  if (!localeReady) return null
   return h('div', { className: 'deck-remote-frame' },
     cached ? h('div', { className: 'deck-cache-banner', role: 'status' }, `${status.alias} · 缓存 · 完成状态待确认`, status.error ? h('span', null, status.error) : null) : null,
     h('fieldset', { className: 'deck-remote-controls', disabled: cached },
       h('main', { className: 'dsb-main dsb_centerCol' },
         h('div', { className: 'dsb-band' }),
         visibleShown ? h(Fragment, { key: visibleShown },
-          h('div', { className: 'dsb-head' }, h(HeaderPill, { ...views, sessionId: visibleShown, useSession: team.sessionHook(visibleShown) })),
+          h('div', { className: 'dsb-head' }, h(HeaderPill, { ...views, actions: headerActions, sessionId: visibleShown, useSession: team.sessionHook(visibleShown) })),
           h(Chat, { key: visibleShown, sessionId: visibleShown, team }))
           : h('div', { className: 'deck-remote-empty' }, roster.ready ? '此服务器暂无可显示的 Bot，可从服务器菜单新建。' : '正在读取远程团队…'))),
     h(Contain, { onError: closeOverlays }, h(Overlays, views)),

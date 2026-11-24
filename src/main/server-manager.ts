@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 只有主进程可以读取 Vault；对外快照严格排除身份、令牌和配对码。
 import { randomUUID } from 'node:crypto'
-import type { Bounds, ContentCommand, PetSettings, SavedClient, SavedServer, Selection, Snapshot } from '../shared/domain.ts'
+import type { AppearanceSettings, Bounds, ContentCommand, PetSettings, SavedClient, SavedServer, Selection, Snapshot } from '../shared/domain.ts'
 import { emptyCounts } from '../shared/domain.ts'
 import { MAX_SERVERS, DeckError, command, record, selection, text, validServerId } from '../shared/validation.ts'
 import { makePeer, newIdentity, pairingOffer } from './link-factory.ts'
@@ -30,6 +30,7 @@ export class ServerManager {
   setNavigation(handler: (serverId: string, command: ContentCommand) => void): void { this.navigation = handler }
   activeServer(): string | null { return this.active }
   petSettings(): PetSettings { return this.vault.petSettings() }
+  appearanceSettings(): AppearanceSettings { return this.vault.snapshot().appearance }
   currentSelection(): Selection | null { return this.chosen === null ? null : { ...this.chosen } }
   connection(id: string): ServerConnection {
     const connection = this.connections.get(id)
@@ -69,7 +70,8 @@ export class ServerManager {
       counts[entity.task] += 1
       tasks.push({ serverId: server.id, kind: entity.kind, id: entity.id, key: entity.key, title: entity.name, serverAlias: server.alias, color: entity.task, detail: entity.detail, cached: server.cached })
     }
-    return { revision: this.revision, servers, activeServerId: this.active, selected: this.currentSelection(), pet: this.vault.snapshot().pet, tasks, counts, startupError: this.startupError }
+    const local = this.vault.snapshot()
+    return { revision: this.revision, servers, activeServerId: this.active, selected: this.currentSelection(), pet: local.pet, appearance: local.appearance, tasks, counts, startupError: this.startupError }
   }
   async pair(input: unknown, alias: unknown, repairId?: unknown): Promise<string> {
     if (this.startupError) throw new DeckError('vault/unavailable', this.startupError)
@@ -178,8 +180,12 @@ export class ServerManager {
     const saved = this.vault.snapshot().servers.find(item => item.id === id)
     if (saved) connection.update(saved)
   }
-  async setPet(patch: Partial<Pick<PetSettings, 'enabled' | 'locked' | 'alwaysOnTop' | 'position'>>): Promise<void> {
+  async setPet(patch: Partial<PetSettings>): Promise<void> {
     await this.vault.update(value => ({ ...value, pet: { ...value.pet, ...patch } }))
+    this.changed()
+  }
+  async setAppearance(patch: Partial<AppearanceSettings>): Promise<void> {
+    await this.vault.update(value => ({ ...value, appearance: { ...value.appearance, ...patch } }))
     this.changed()
   }
   async saveWindow(window: Bounds): Promise<void> { await this.vault.update(value => ({ ...value, window })) }

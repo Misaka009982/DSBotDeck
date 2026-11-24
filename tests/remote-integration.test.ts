@@ -73,6 +73,19 @@ test('两个真实连接对象使用隔离身份，公开快照没有链路私�
     for (const secret of [a.identity.privateKey, b.identity.privateKey, a.identity.accessToken, b.identity.accessToken]) assert.equal(snapshot.includes(secret), false)
   })
 })
+test('本机外观和宠物配置经真实身份库保存，不改变配对身份或发送远程请求', async () => {
+  await withClient(async (manager, peers) => {
+    const before = manager.connection('server-a').settings()
+    const requests = new Map([...peers].map(([id, peer]) => [id, peer.sent.length]))
+    await manager.setAppearance({ iconPath: 'C:/fixtures/deck.png', backgroundPath: 'C:/fixtures/background.webp', opacity: 0.6, language: 'zh-TW' })
+    await manager.setPet({ skin: 'fixture-pet', size: 128, locked: true })
+    const snapshot = manager.snapshot()
+    assert.equal(snapshot.appearance.opacity, 0.6); assert.equal(snapshot.appearance.language, 'zh-TW'); assert.equal(snapshot.pet.skin, 'fixture-pet')
+    assert.equal(snapshot.pet.size, 128); assert.equal(snapshot.pet.locked, true)
+    assert.deepEqual(manager.connection('server-a').settings(), before)
+    for (const [id, peer] of peers) assert.equal(peer.sent.length, requests.get(id))
+  })
+})
 test('原 UI 的 JSON 请求通过真实适配和门禁，只发送到固定目标', async () => {
   await withClient(async (manager, peers) => {
     manager.navigate('server-a', { action: 'settings', page: 'models' })

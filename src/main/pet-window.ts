@@ -3,7 +3,7 @@
 import { BrowserWindow, screen } from 'electron'
 import type { IpcMainEvent, WebContents } from 'electron'
 import path from 'node:path'
-import type { Bounds, Point } from '../shared/domain.ts'
+import type { Bounds, LocalAssetsView, Point } from '../shared/domain.ts'
 import { dragBounds, petInteractive, petRegion, petRegions } from '../shared/pet-geometry.ts'
 import type { PetRegions } from '../shared/pet-geometry.ts'
 import { ServerManager } from './server-manager.ts'
@@ -18,7 +18,10 @@ export class PetWindow {
   private dragging: { start: Point; origin: Bounds } | null = null
   private interactive = false
   private readonly openMain: () => void
-  constructor(manager: ServerManager, dist: string, openMain: () => void) { this.manager = manager; this.dist = dist; this.openMain = openMain }
+  private readonly openSettings: () => void
+  private assets: LocalAssetsView | null = null
+  constructor(manager: ServerManager, dist: string, openMain: () => void, openSettings: () => void) { this.manager = manager; this.dist = dist; this.openMain = openMain; this.openSettings = openSettings }
+  updateAssets(value: LocalAssetsView): void { this.assets = value; if (this.window && !this.window.webContents.isDestroyed()) this.window.webContents.send('deck:pet-assets', value) }
   owns(contents: WebContents): boolean { return this.window?.webContents === contents && !contents.isDestroyed() }
   private safe(point: Point): Point {
     const area = screen.getDisplayNearestPoint({ x: point.x + SIZE.width - 60, y: point.y + SIZE.height - 50 }).workArea
@@ -55,7 +58,7 @@ export class PetWindow {
     this.window.webContents.send('deck:pet-snapshot', this.manager.snapshot())
     this.sample()
   }
-  ready(event: IpcMainEvent): void { if (this.owns(event.sender)) event.sender.send('deck:pet-snapshot', this.manager.snapshot()) }
+  ready(event: IpcMainEvent): void { if (this.owns(event.sender) && event.senderFrame === event.sender.mainFrame) { event.sender.send('deck:pet-snapshot', this.manager.snapshot()); event.sender.send('deck:pet-assets', this.assets) } }
   updateRegions(event: IpcMainEvent, value: unknown): void {
     if (!this.owns(event.sender) || event.senderFrame !== event.sender.mainFrame) return
     const regions = petRegions(value)
@@ -88,6 +91,7 @@ export class PetWindow {
     await this.manager.setPet({ position: current }); this.sample()
   }
   showMain(): void { this.openMain() }
+  showSettings(): void { this.openSettings() }
   hide(): void { if (this.window && !this.window.isDestroyed()) this.window.hide(); this.dragging = null }
   close(): void { clearInterval(this.sampling); this.sampling = undefined; this.window?.destroy(); this.window = null }
 }

@@ -29,10 +29,13 @@ test('存储序列化更新，不在文件中保留明文配置', async () => {
     const file = path.join(directory, 'client.vault.json'); const cipher = new FixtureCipher(); const vault = new Vault(file, cipher)
     await vault.load()
     await Promise.all([vault.update(value => ({ ...value, pet: { ...value.pet, enabled: true } })), vault.update(value => ({ ...value, pet: { ...value.pet, locked: true } }))])
+    await vault.update(value => ({ ...value, appearance: { ...value.appearance, backgroundPath: 'C:/fixtures/background.webp', opacity: 0.6 }, pet: { ...value.pet, skin: 'fixture-pet', size: 128 } }))
     const encoded = await readFile(file, 'utf8')
-    assert.equal(encoded.includes('enabled'), false)
+    assert.equal(encoded.includes('enabled'), false); assert.equal(encoded.includes('background.webp'), false)
     const loaded = await new Vault(file, cipher).load()
     assert.equal(loaded.pet.enabled, true); assert.equal(loaded.pet.locked, true)
+    assert.equal(loaded.pet.skin, 'fixture-pet'); assert.equal(loaded.pet.size, 128)
+    assert.equal(loaded.appearance.backgroundPath, 'C:/fixtures/background.webp'); assert.equal(loaded.appearance.opacity, 0.6)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 test('加密不可用不降级，损坏记录不覆写', async () => {

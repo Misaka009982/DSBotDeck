@@ -31,8 +31,9 @@ export class ContentViews {
   private overlay = false
   private rectangle = { x: 280, y: 0, width: 600, height: 700 }
   private readonly report: (message: string | null) => void
-  constructor(window: BrowserWindow, manager: ServerManager, dist: string, gate: RequestGate, report: (message: string | null) => void) {
-    this.window = window; this.manager = manager; this.dist = dist; this.gate = gate; this.report = report
+  private readonly localBackground: () => boolean
+  constructor(window: BrowserWindow, manager: ServerManager, dist: string, gate: RequestGate, report: (message: string | null) => void, localBackground: () => boolean = () => false) {
+    this.window = window; this.manager = manager; this.dist = dist; this.gate = gate; this.report = report; this.localBackground = localBackground
     manager.setNavigation((id, packet) => this.navigate(id, packet))
     window.on('hide', () => { this.activation += 1 })
     window.on('minimize', () => { this.activation += 1 })
@@ -63,6 +64,7 @@ export class ContentViews {
       session: isolated, preload: path.join(this.dist, 'preload/content.cjs'),
       nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
     } })
+    view.setBackgroundColor('#00000000')
     const entry: Entry = { instance: randomUUID(), view, ready: false, failed: false, usedAt: Date.now(), pending: null, receipts: new Map() }
     this.entries.set(id, entry)
     this.window.contentView.addChildView(view)
@@ -90,7 +92,7 @@ export class ContentViews {
   }
   private status(id: string): ContentStatus {
     const server = this.manager.connection(id).view()
-    return { cached: server.cached, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt }
+    return { cached: server.cached, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt, localBackground: this.localBackground(), uiLanguage: this.manager.appearanceSettings().language }
   }
   sync(): void {
     if (this.window.isDestroyed()) return

@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // 仅管理本机窗口与远程连接，不启动 DSH、Agent 或 HTTP 服务。
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, protocol, safeStorage, screen, session, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, safeStorage, screen, session, Tray } from 'electron'
 import type { IpcMainInvokeEvent, IpcMainEvent } from 'electron'
+import { createHash } from 'node:crypto'
+import { lstat, mkdir, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import path from 'node:path'
-import type { Bounds, BotResult, PetSettings } from '../shared/domain.ts'
-import { DeckError, errorCode, record, safeMessage } from '../shared/validation.ts'
+import type { AppearanceSettings, Bounds, BotResult, PetSettings } from '../shared/domain.ts'
+import { DeckError, errorCode, finite, localPath, petSkin, record, safeMessage, savedAppearance } from '../shared/validation.ts'
 import { ContentViews } from './content-views.ts'
+import { LocalAssets, readImage } from './local-assets.ts'
 import { WindowsUnlock } from './native-unlock.ts'
 import { PetWindow } from './pet-window.ts'
 import { SCHEME, staticResponse } from './protocol.ts'
@@ -28,14 +32,19 @@ function restore(value: Bounds | null): Bounds {
   const height = Math.min(Math.max(620, normal.height), area.height)
   return { x: Math.round(Math.max(area.x, Math.min(value?.x ?? area.x + (area.width - width) / 2, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(value?.y ?? area.y + (area.height - height) / 2, area.y + area.height - height))), width, height }
 }
-function petPatch(value: unknown): Partial<Pick<PetSettings, 'enabled' | 'locked' | 'alwaysOnTop'>> {
+function petPatch(value: unknown): Partial<Omit<PetSettings, 'position'>> {
   const input = record(value)
-  if (!input || Object.keys(input).some(key => !['enabled', 'locked', 'alwaysOnTop'].includes(key))) throw new DeckError('bot/invalid', '宠物设置无效。')
-  const patch: Partial<Pick<PetSettings, 'enabled' | 'locked' | 'alwaysOnTop'>> = {}
+  if (!input || Object.keys(input).some(key => !['enabled', 'locked', 'alwaysOnTop', 'skin', 'size'].includes(key))) throw new DeckError('bot/invalid', '宠物设置无效。')
+  const patch: Partial<Omit<PetSettings, 'position'>> = {}
   for (const key of ['enabled', 'locked', 'alwaysOnTop'] as const) {
     if (input[key] === undefined) continue
     if (typeof input[key] !== 'boolean') throw new DeckError('bot/invalid', '宠物设置必须为布尔值。')
     patch[key] = input[key]
+  }
+  if (input.skin !== undefined) patch.skin = petSkin(input.skin)
+  if (input.size !== undefined) {
+    if (!finite(input.size) || input.size < 72 || input.size > 144) throw new DeckError('bot/invalid', '宠物尺寸须在 72 到 144 之间。')
+    patch.size = Math.round(input.size)
   }
   return patch
 }
@@ -49,12 +58,17 @@ async function start(): Promise<void> {
   let startupError: string | null = null
   try { await vault.load() } catch (error) { startupError = safeMessage(error) }
   const manager = new ServerManager(vault, undefined, startupError)
+  const assets = new LocalAssets(path.join(homedir(), '.codex', 'pets'))
+  await assets.refresh(manager.appearanceSettings(), manager.petSettings().skin)
   let window: BrowserWindow | null = null
   let views: ContentViews | null = null
   let tray: Tray | null = null
   let quitting = false
   let stopped = false
   let saveTimer: ReturnType<typeof setTimeout> | undefined
+  let localQueue: Promise<unknown> = Promise.resolve()
+  let iconSignature = ''
+  const localAction = (action: () => Promise<unknown>): Promise<unknown> => { const next = localQueue.then(action); localQueue = next.catch(() => {}); return next }
   const helper = app.isPackaged ? path.join(process.resourcesPath, 'native/windows-hello.ps1') : path.join(app.getAppPath(), 'native/windows-hello.ps1')
   const gate = new RequestGate(new WindowsUnlock(helper, () => window && !window.isDestroyed() ? window.getNativeWindowHandle() : null))
   const owns = (event: IpcMainInvokeEvent | IpcMainEvent): boolean => !quitting && window?.webContents === event.sender && event.senderFrame === event.sender.mainFrame && !event.sender.isDestroyed()
@@ -69,7 +83,61 @@ async function start(): Promise<void> {
     if (window.isMinimized()) window.restore()
     window.show(); window.focus(); views?.sync()
   }
-  const pet = new PetWindow(manager, dist, show)
+  const openSettings = () => { show(); window?.webContents.send('deck:open-settings') }
+  const pet = new PetWindow(manager, dist, show, openSettings)
+  pet.updateAssets(assets.view('pet'))
+  const publishAssets = () => {
+    if (window && !window.webContents.isDestroyed()) window.webContents.send('deck:local-assets', assets.view('shell'))
+    pet.updateAssets(assets.view('pet')); views?.sync()
+  }
+  const applyIcon = async () => {
+    const bytes = assets.iconBytes()
+    const source = manager.appearanceSettings().iconPath
+    const signature = bytes ? createHash('sha256').update(bytes).digest('hex') : 'default'
+    if (signature === iconSignature) return
+    let image = bytes ? nativeImage.createFromBuffer(bytes) : nativeImage.createFromPath(path.join(dist, 'assets/icon.png'))
+    if (image.isEmpty() && source && bytes) image = nativeImage.createFromPath(source)
+    if (image.isEmpty()) image = nativeImage.createFromPath(path.join(dist, 'assets/icon.png'))
+    let iconPath = path.join(dist, 'assets/icon.ico')
+    if (bytes && !image.isEmpty()) {
+      // Windows 的任务栏 AppDetails 需要 ICO；由选中图片生成本机缓存，不修改 EXE 或快捷方式。
+      const folder = path.join(app.getPath('userData'), 'appearance')
+      await mkdir(folder, { recursive: true })
+      if ((await lstat(folder)).isSymbolicLink()) throw new DeckError('asset/refused', '图标缓存目录不能是链接。')
+      iconPath = path.join(folder, 'deck.ico')
+      try { if ((await lstat(iconPath)).isSymbolicLink()) throw new DeckError('asset/refused', '图标缓存不能是链接。') } catch (error) { if (record(error)?.code !== 'ENOENT') throw error }
+      const png = image.resize({ width: 256, height: 256 }).toPNG()
+      const header = Buffer.alloc(22)
+      header.writeUInt16LE(1, 2); header.writeUInt16LE(1, 4); header.writeUInt16LE(1, 10); header.writeUInt16LE(32, 12); header.writeUInt32LE(png.length, 14); header.writeUInt32LE(22, 18)
+      await writeFile(iconPath, Buffer.concat([header, png]))
+    }
+    if (window && !window.isDestroyed()) { window.setIcon(image); window.setAppDetails({ appId: 'io.dsbotdeck.desktop', appIconPath: iconPath, appIconIndex: 0 }) }
+    tray?.setImage(bytes ? image.resize({ width: 20, height: 20 }) : nativeImage.createFromPath(path.join(dist, 'assets/tray.ico')))
+    iconSignature = signature
+  }
+  const refreshAssets = async () => {
+    await assets.refresh(manager.appearanceSettings(), manager.petSettings().skin)
+    try { await applyIcon() }
+    catch (error) { assets.warn('图标未能完整应用，请检查本机图片和客户端缓存目录权限。'); throw error }
+    finally { publishAssets() }
+  }
+  const chooseAsset = async (kind: unknown) => {
+    if (!window || !['icon', 'background', 'pets'].includes(String(kind))) throw new DeckError('bot/invalid', '本机素材类型无效。')
+    const picked = await dialog.showOpenDialog(window, kind === 'pets'
+      ? { title: '选择 Codex 宠物合集目录', properties: ['openDirectory'] }
+      : { title: kind === 'icon' ? '选择 Deck 图标' : '选择 Deck 背景', properties: ['openFile'], filters: [{ name: '本机图片', extensions: kind === 'icon' ? ['png', 'jpg', 'jpeg', 'webp', 'ico'] : ['png', 'jpg', 'jpeg', 'webp'] }] })
+    if (picked.canceled || !picked.filePaths[0]) return null
+    const selected = localPath(picked.filePaths[0])
+    if (!selected) return null
+    if (kind !== 'pets') {
+      await readImage(selected, kind === 'icon')
+      const image = nativeImage.createFromPath(selected)
+      if (image.isEmpty() || image.getSize().width * image.getSize().height > 40_000_000) throw new DeckError('asset/invalid', '图片无法解码或尺寸过大；原设置未修改。')
+    }
+    const patch: Partial<AppearanceSettings> = kind === 'icon' ? { iconPath: selected } : kind === 'background' ? { backgroundPath: selected } : { petLibraryPath: selected }
+    await manager.setAppearance(patch); await refreshAssets()
+    return null
+  }
   function createWindow(): void {
     const created = new BrowserWindow({
       ...restore(vault.snapshot().window), minWidth: 960, minHeight: 620, show: false, title: 'DSBotDeck',
@@ -79,7 +147,9 @@ async function start(): Promise<void> {
     })
     window = created
     created.setMenu(null)
-    views = new ContentViews(created, manager, dist, gate, message => { if (!created.webContents.isDestroyed()) created.webContents.send('deck:view-error', message) })
+    views = new ContentViews(created, manager, dist, gate, message => { if (!created.webContents.isDestroyed()) created.webContents.send('deck:view-error', message) }, () => assets.hasBackground())
+    iconSignature = ''
+    void localAction(applyIcon).catch(() => { assets.warn('图标缓存未能应用；请检查客户端数据目录权限。'); publishAssets() })
     created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     created.webContents.on('will-navigate', (event, url) => { if (url !== `${SCHEME}://shell/index.html`) event.preventDefault() })
     created.webContents.on('will-attach-webview', event => event.preventDefault())
@@ -96,6 +166,11 @@ async function start(): Promise<void> {
     const url = new URL(request.url)
     if (url.protocol !== `${SCHEME}:` || !['shell', 'pet'].includes(url.hostname) || url.username || url.password) return new Response('不允许此来源', { status: 403 })
     if (url.pathname.startsWith('/api/')) return new Response('此页面没有远程 RPC 权限', { status: 403 })
+    if (url.pathname.startsWith('/local/')) {
+      const origin = request.headers.get('origin')
+      if (origin && origin !== `${SCHEME}://${url.hostname}`) return new Response('拒绝跨来源素材请求', { status: 403 })
+      return assets.response(url.hostname === 'shell' ? 'shell' : 'pet', url.pathname, request.method)
+    }
     return staticResponse(path.join(dist, 'renderer'), url.pathname, request.method)
   })
   ipcMain.handle('deck:shell-snapshot', event => { if (!owns(event)) throw new DeckError('bot/refused', '拒绝非主窗口请求。'); return manager.snapshot() })
@@ -112,7 +187,26 @@ async function start(): Promise<void> {
       case 'select': return manager.select(data.args)
       case 'navigate': return manager.navigate(id, args.command)
       case 'follow': return manager.follow(id, args.key, args.followed)
-      case 'pet': return manager.setPet(petPatch(data.args))
+      case 'pet': return localAction(async () => {
+        const patch = petPatch(data.args)
+        if (patch.skin && !assets.view('shell').pets.some(entry => entry.key === patch.skin && entry.available)) throw new DeckError('asset/invalid', '所选宠物不在可用合集中，请先刷新目录。')
+        const changedSkin = patch.skin !== undefined && patch.skin !== manager.petSettings().skin
+        await manager.setPet(patch)
+        if (changedSkin) await refreshAssets()
+      })
+      case 'assets': return assets.view('shell')
+      case 'choose-asset': return localAction(() => chooseAsset(args.kind))
+      case 'refresh-assets': return localAction(refreshAssets)
+      case 'reset-asset': return localAction(async () => {
+        if (!['icon', 'background', 'pets'].includes(String(args.kind))) throw new DeckError('bot/invalid', '不能重置此素材。')
+        await manager.setAppearance(args.kind === 'icon' ? { iconPath: null } : args.kind === 'background' ? { backgroundPath: null } : { petLibraryPath: null })
+        await refreshAssets()
+      })
+      case 'appearance': return localAction(async () => {
+        if (Object.keys(args).some(key => !['opacity', 'blur', 'fit', 'language'].includes(key))) throw new DeckError('bot/invalid', '图片与目录只能由本机选择器授权。')
+        const next = savedAppearance({ ...manager.appearanceSettings(), ...args })
+        await manager.setAppearance(next)
+      })
       case 'reopen': manager.connection(id); views?.reopen(id); return null
       case 'quit': app.quit(); return null
       default: throw new DeckError('bot/invalid', '不支持此本机操作。')
@@ -137,7 +231,7 @@ async function start(): Promise<void> {
   ipcMain.handle('deck:pet-action', (event, packet: unknown) => result(async () => {
     if (quitting || !pet.owns(event.sender) || event.senderFrame !== event.sender.mainFrame) throw new DeckError('bot/refused', '拒绝非宠物窗口操作。')
     const data = record(packet)
-    if (data?.action === 'prefs') return manager.setPet(petPatch(data.args))
+    if (data?.action === 'settings') { pet.showSettings(); return null }
     if (data?.action === 'open') { show(); return null }
     if (data?.action === 'select') { show(); return manager.select(data.args) }
     throw new DeckError('bot/invalid', '不支持此宠物操作。')
@@ -161,7 +255,7 @@ async function start(): Promise<void> {
     event.preventDefault()
     if (quitting) return
     quitting = true; clearTimeout(saveTimer)
-    void saveWindow().catch(() => {}).then(() => manager.stop()).finally(() => { stopped = true; views?.close(); pet.close(); tray?.destroy(); tray = null; app.quit() })
+    void saveWindow().catch(() => {}).then(() => localQueue).then(() => manager.stop()).finally(() => { stopped = true; views?.close(); pet.close(); tray?.destroy(); tray = null; app.quit() })
   })
   createWindow(); manager.start(); pet.sync()
 }

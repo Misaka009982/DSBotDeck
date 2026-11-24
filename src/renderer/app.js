@@ -2,9 +2,12 @@
 // 本机服务器树复用上游标记、主题和按钮语法；原团队 UI 在独立页面内。
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { BotAvatar, BotMark } from '@dsbot/client/mark.js'
-import { ChevronDownIcon, ChevronRightIcon, CloseIcon, DotsIcon, GearIcon, MonitorIcon, PeopleIcon, PlusIcon, SearchIcon, StarLineIcon } from '@dsbot/client/icons.js'
+import { ChevronDownIcon, ChevronRightIcon, CloseIcon, DotsIcon, GearIcon, MonitorIcon, PeopleIcon, PlusIcon, SearchIcon, SidebarIcon, StarLineIcon } from '@dsbot/client/icons.js'
 import { allThemes, effectsOf, themeCss } from '@dsbot/client/themes.js'
-import { groupEntities, serverLabel, visibleServers } from '../shared/navigation.ts'
+import { groupEntities, serverLabel, settingsCommand, visibleServers } from '../shared/navigation.ts'
+import { backgroundLevels } from '../shared/appearance.ts'
+import { DeckSettings } from './deck-settings.js'
+import { useDeckLocale } from './deck-locale.js'
 const api = window.dsbotDeck
 const COLOR_LABELS = { green: '运行', yellow: '待交互', red: '明确失败', blue: '完成待查看' }
 function storedCollapse() { try { return JSON.parse(localStorage.getItem('dsbotdeck.tree-collapsed') ?? '{}') } catch { return {} } }
@@ -64,6 +67,8 @@ function Sheet({ mode, server, busy, error, run, close }) {
 }
 export function App() {
   const [snapshot, setSnapshot] = useState(null)
+  const [assets, setAssets] = useState(null)
+  const [rail, setRail] = useState(() => { try { return localStorage.getItem('dsbotdeck.sidebar-rail') === 'true' } catch { return false } })
   const [viewError, setViewError] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -77,8 +82,11 @@ export function App() {
     let stopped = false
     const accept = next => { if (!stopped) setSnapshot(current => !current || next.revision >= current.revision ? next : current) }
     const off = api.onSnapshot(accept); const offView = api.onViewError(setViewError)
+    const offAssets = api.onAssets(value => { if (!stopped) setAssets(value) })
+    const offSettings = api.onSettings(() => { setMenu(null); setError(null); setSheet({ mode: 'deck' }) })
+    api.assets().then(result => { if (!stopped && result.ok) setAssets(result.value) }).catch(() => {})
     api.snapshot().then(accept).catch(() => setError('无法读取客户端配置，请检查主进程是否正常启动。'))
-    return () => { stopped = true; off(); offView() }
+    return () => { stopped = true; off(); offView(); offAssets(); offSettings() }
   }, [])
   useEffect(() => {
     const measure = () => { const rect = viewport.current?.getBoundingClientRect(); if (rect) api.viewport({ x: rect.left, y: rect.top, width: rect.width, height: rect.height }) }
@@ -86,9 +94,11 @@ export function App() {
     window.addEventListener('resize', measure); return () => { observer.disconnect(); window.removeEventListener('resize', measure) }
   }, [])
   useEffect(() => { api.overlay(sheet !== null); return () => api.overlay(false) }, [sheet !== null])
+  useEffect(() => { try { localStorage.setItem('dsbotdeck.sidebar-rail', String(rail)) } catch {} }, [rail])
   useEffect(() => { try { localStorage.setItem('dsbotdeck.tree-collapsed', JSON.stringify(collapsed)) } catch {} }, [collapsed])
   const active = snapshot?.servers.find(server => server.id === snapshot.activeServerId)
   useTheme(active?.team?.prefs)
+  useDeckLocale(snapshot?.appearance.language ?? 'zh')
   const toggle = key => setCollapsed(value => ({ ...value, [key]: !value[key] }))
   const run = async (action, close = false) => {
     if (busy) return
@@ -101,24 +111,31 @@ export function App() {
   const select = (server, entity) => { setMenu(null); void run(() => api.select({ serverId: server.id, kind: entity.kind, id: entity.id })) }
   const keyNav = event => {
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return
-    const items = [...tree.current.querySelectorAll('[data-nav]')]; const at = items.indexOf(document.activeElement)
+    const items = [...tree.current.querySelectorAll('[data-nav]')].filter(item => item.getClientRects().length > 0); const at = items.indexOf(document.activeElement)
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : Math.max(0, Math.min(items.length - 1, at + (event.key === 'ArrowDown' ? 1 : -1)))
     if (items[next]) { event.preventDefault(); items[next].focus() }
   }
   const servers = visibleServers(snapshot?.servers ?? [], search)
-  return h('div', { className: 'deck-frame' },
+  const local = snapshot?.appearance
+  const background = backgroundLevels(local?.opacity ?? 0.25)
+  return h('div', { className: 'deck-frame', 'data-rail': rail || undefined, 'data-local-background': Boolean(assets?.background) || undefined, style: {
+    '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.surface, '--deck-chat-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': local?.fit ?? 'cover',
+  } },
     h('aside', { className: 'deck-side' },
-      h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), h(BotMark, { size: 24 }), h('span', null, 'DSBotDeck'), button('添加服务器', () => openSheet('pair'), PlusIcon, { disabled: Boolean(snapshot?.startupError) })),
+      h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), assets?.icon ? h('img', { className: 'deck-app-icon', src: assets.icon, alt: '' }) : h(BotMark, { size: 24 }), h('span', { className: 'deck-brand-name' }, 'DSBotDeck'),
+        button(rail ? '展开侧栏' : '折叠侧栏', () => { setMenu(null); setRail(value => !value) }, SidebarIcon, { 'aria-expanded': !rail, 'aria-controls': 'deck-server-tree' }),
+        button('添加服务器', () => openSheet('pair'), PlusIcon, { className: 'deck-icon deck-add-server', disabled: Boolean(snapshot?.startupError) })),
       h('label', { className: 'deck-search' }, h(SearchIcon), h('input', { type: 'search', placeholder: '搜索服务器、Bot 或群聊', 'aria-label': '搜索服务器、Bot 或群聊', value: search, onChange: event => setSearch(event.target.value) })),
-      h('nav', { ref: tree, className: 'deck-tree', role: 'tree', 'aria-label': '远程服务器与 Bot', onKeyDown: keyNav },
+      h('nav', { ref: tree, id: 'deck-server-tree', className: 'deck-tree', role: 'tree', 'aria-label': '远程服务器与 Bot', onKeyDown: keyNav },
         servers.map(server => {
           const open = Boolean(search) || !collapsed[server.id]
           const query = server.alias.toLocaleLowerCase().includes(search.toLocaleLowerCase()) ? '' : search
-          return h('section', { key: server.id, className: 'deck-server', role: 'treeitem', 'aria-expanded': open, 'aria-label': server.alias },
+          return h('section', { key: server.id, className: 'deck-server', role: 'treeitem', 'aria-expanded': !rail && open, 'aria-label': server.alias },
             h('div', { className: 'deck-server-head' },
               h('button', { type: 'button', 'data-nav': '', className: 'deck-disclose', 'aria-expanded': open, 'aria-label': `${open ? '折叠' : '展开'} ${server.alias}`, onClick: () => toggle(server.id), onKeyDown: event => { if (event.key === 'ArrowLeft' && open || event.key === 'ArrowRight' && !open) { event.preventDefault(); toggle(server.id) } } }, h(open ? ChevronDownIcon : ChevronRightIcon)),
-              h(MonitorIcon), h('button', { type: 'button', 'data-nav': '', className: 'deck-server-title', onClick: () => void run(() => api.navigate(server.id, { action: 'settings', page: 'general' })) }, h('strong', null, server.alias), h('span', { title: server.error ?? undefined }, server.cached && server.team ? `${serverLabel(server.state)} · 缓存` : serverLabel(server.state))),
-              button('服务器操作', () => setMenu(menu === server.id ? null : server.id), DotsIcon, { 'aria-expanded': menu === server.id })),
+              h(MonitorIcon), h('button', { type: 'button', 'data-nav': '', className: 'deck-server-title', title: server.alias, 'aria-label': server.alias, onClick: () => { if (rail) { setRail(false); setCollapsed(value => ({ ...value, [server.id]: false })) } else toggle(server.id) } }, rail ? h(MonitorIcon) : null, h('strong', null, server.alias), h('span', { title: server.error ?? undefined }, server.cached && server.team ? `${serverLabel(server.state)} · 缓存` : serverLabel(server.state))),
+              button('服务器设置', () => { setMenu(null); void run(() => api.navigate(server.id, { action: 'settings', page: 'general' })) }, GearIcon, { className: 'deck-icon deck-server-settings' }),
+              button('服务器操作', () => setMenu(menu === server.id ? null : server.id), DotsIcon, { className: 'deck-icon deck-server-operations', 'aria-expanded': menu === server.id })),
             menu === server.id ? h('div', { className: 'deck-server-menu', role: 'menu' },
               ['ready', 'connecting', 'reconnecting'].includes(server.state) ? h('button', { type: 'button', role: 'menuitem', onClick: () => { setMenu(null); void run(() => api.disconnect(server.id)) } }, '断开本机连接') : h('button', { type: 'button', role: 'menuitem', onClick: () => { setMenu(null); void run(() => api.connect(server.id)) } }, '连接服务器'),
               h('button', { type: 'button', role: 'menuitem', onClick: () => openSheet('repair', server) }, '重新配对'),
@@ -140,6 +157,7 @@ export function App() {
                         entity.kind === 'room' ? h('span', { className: 'deck-room-mark' }, h(PeopleIcon)) : h(BotAvatar, { bot: entity, size: 28, main: entity.main, live: !server.cached }),
                         h('span', { className: 'deck-node-copy' }, h('span', { className: 'deck-node-name' }, entity.name), h('span', { className: 'deck-node-detail' }, entity.detail)),
                         entity.task ? h('span', { className: 'deck-lamp', 'data-color': entity.task, 'data-cached': server.cached || undefined, role: 'img', 'aria-label': `${COLOR_LABELS[entity.task]}${server.cached ? '（缓存）' : ''}` }) : null),
+                      button(entity.kind === 'room' ? '群聊参数' : 'Bot 参数', () => { setMenu(null); void run(() => api.navigate(server.id, settingsCommand(entity))) }, GearIcon, { className: 'deck-icon deck-entity-settings' }),
                       button(entity.followed ? '取消宠物关注' : '加入宠物关注', () => void run(() => api.follow(server.id, entity.key, !entity.followed)), StarLineIcon, { 'aria-pressed': entity.followed, className: 'deck-follow' }))
                   })) : null)
               }),
@@ -148,12 +166,12 @@ export function App() {
         }),
         servers.length === 0 ? h('div', { className: 'deck-tree-empty' }, search ? '没有匹配的服务器或对象。' : '添加服务器后，在这里选择 Bot 或群聊。') : null),
       h('footer', { className: 'deck-side-foot' },
-        h('button', { type: 'button', className: 'bt-soft', disabled: !snapshot || Boolean(snapshot.startupError), 'aria-pressed': snapshot?.pet.enabled, onClick: () => void run(() => api.pet({ enabled: !snapshot.pet.enabled })) }, h(BotMark, { size: 16 }), snapshot?.pet.enabled ? '隐藏四色宠物' : '显示四色宠物'),
-        active ? button('原 DS-Bot 设置', () => void run(() => api.navigate(active.id, { action: 'settings', page: 'general' })), GearIcon) : null)),
+        h('button', { type: 'button', className: 'bt-soft deck-open-settings', title: 'Deck 设置', 'aria-label': 'Deck 设置', onClick: () => openSheet('deck') }, h(GearIcon), h('span', null, 'Deck 设置')))),
     h('main', { ref: viewport, className: 'deck-content-slot', 'aria-label': '原 DS-Bot 界面' },
       !snapshot || !active ? h('div', { className: 'deck-welcome' }, h(BotMark, { size: 72 }), h('h1', null, '连接远程 DS-Bot'), h('p', null, '原团队界面，多服务器导航。客户端不会启动本地 DSH。'), h('button', { type: 'button', className: 'bt-send', disabled: Boolean(snapshot?.startupError), onClick: () => openSheet('pair') }, '添加服务器')) : null,
       viewError ? h('div', { className: 'deck-view-error', role: 'alert' }, h('p', null, viewError), h('button', { type: 'button', className: 'bt-soft', onClick: () => void run(() => api.reopen(active.id)) }, '重新打开界面')) : null),
     snapshot?.startupError ? h('div', { className: 'deck-error-banner', role: 'alert' }, snapshot.startupError) : null,
     error && !sheet ? h('div', { className: 'deck-toast', role: 'alert' }, error, button('关闭提示', () => setError(null), CloseIcon)) : null,
-    sheet ? h(Sheet, { key: `${sheet.mode}:${sheet.server?.id ?? ''}`, ...sheet, busy, error, run, close: () => { if (!busy) setSheet(null) } }) : null)
+    sheet?.mode === 'deck' ? h(DeckSettings, { snapshot, assets, busy, error, run, close: () => { if (!busy) setSheet(null) } })
+      : sheet ? h(Sheet, { key: `${sheet.mode}:${sheet.server?.id ?? ''}`, ...sheet, busy, error, run, close: () => { if (!busy) setSheet(null) } }) : null)
 }
