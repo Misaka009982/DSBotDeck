@@ -2,6 +2,10 @@
 // Deck 本机设置不向服务器发 RPC；图片和目录均由系统选择器授权。
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { CloseIcon } from '@dsbot/client/icons.js'
+import { CharacterGrid } from '@dsbot/client/bot-settings.js'
+import { MAIN_LOOK } from '@dsbot/client/characters.js'
+import { lookOf } from '@dsbot/client/mark.js'
+import { renderBuiltinIcon } from './builtin-icon.js'
 import { PetSprite } from './pet-sprite.js'
 const api = window.dsbotDeck
 function RangeControl({ label, value, min, max, step = 1, unit = '', disabled, commit }) {
@@ -23,7 +27,7 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
     const key = event => {
       if (event.key === 'Escape' && !state.current.busy) { event.preventDefault(); state.current.close() }
       if (event.key !== 'Tab') return
-      const controls = [...root.current.querySelectorAll('button,input,select')].filter(item => !item.disabled && item.getClientRects().length > 0)
+      const controls = [...root.current.querySelectorAll('button,input,select,summary')].filter(item => !item.matches(':disabled') && item.checkVisibility())
       if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus() }
       else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0]?.focus() }
     }
@@ -34,6 +38,11 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
   const prefs = snapshot?.appearance ?? { opacity: 0.25, blur: 0, fit: 'cover' }
   const pet = snapshot?.pet ?? { enabled: false, locked: false, alwaysOnTop: true, skin: null, size: 112 }
   const act = callback => void run(callback)
+  const iconLook = prefs.builtinIcon?.look ?? MAIN_LOOK
+  const petLook = pet.mark ?? lookOf()
+  const grid = (look, change) => h('fieldset', { className: 'deck-character-grid', disabled }, h(CharacterGrid, { look, onShape: shape => change({ ...look, shape }), onColor: color => change({ ...look, color }) }))
+  const chooseIcon = look => act(async () => api.builtinIcon(look, await renderBuiltinIcon(look)))
+  const choosePetMark = mark => act(() => api.pet({ skin: null, mark }))
   const choose = kind => act(() => api.chooseAsset(kind))
   const reset = kind => act(() => api.resetAsset(kind))
   const check = (label, name) => h('label', { className: 'deck-check' }, h('input', { type: 'checkbox', checked: pet[name], disabled, onChange: event => act(() => api.pet({ [name]: event.target.checked })) }), label)
@@ -50,7 +59,8 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
       h('section', { className: 'deck-setting-block' }, h('h3', null, '程序图标'),
         h('div', { className: 'deck-setting-actions' }, assets?.icon ? h('img', { className: 'deck-icon-preview', src: assets.icon, alt: '当前 Deck 图标' }) : null,
           h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('icon') }, '选择本地图标'),
-          h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.iconPath, onClick: () => reset('icon') }, '恢复默认图标')),
+          h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.iconPath && !prefs.builtinIcon, onClick: () => reset('icon') }, '恢复默认图标')),
+        h('details', { className: 'deck-builtin-picker' }, h('summary', null, 'DS-Bot 内置图标与颜色'), grid(iconLook, chooseIcon)),
         h('p', { className: 'deck-hint' }, '用于 Deck Logo、窗口、运行中的任务栏和托盘。Windows 已固定的快捷方式可能保留旧图标；不会改写 EXE 或远程头像。')),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '整个程序背景'),
         h('div', { className: 'deck-setting-actions' }, h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('background') }, '选择背景图片'), h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.backgroundPath, onClick: () => reset('background') }, '移除背景')),
@@ -64,12 +74,13 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
         h(RangeControl, { label: '宠物尺寸', value: pet.size, min: 72, max: 144, unit: 'px', disabled, commit: size => act(() => api.pet({ size })) }),
         h('div', { className: 'deck-setting-actions' }, h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('pets') }, '选择宠物合集目录'), h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => act(api.refreshAssets) }, '刷新合集'), h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.petLibraryPath, onClick: () => reset('pets') }, '恢复 Codex 默认目录')),
         h('p', { className: 'deck-hint deck-path' }, assets?.libraryPath ?? '正在读取本机合集…'),
-        h('div', { className: 'deck-pet-picker' }, h('div', { className: 'deck-pet-preview' }, h(PetSprite, { asset: assets?.selected, size: 112, pose: 'idle' })),
+        h('div', { className: 'deck-pet-picker' }, h('div', { className: 'deck-pet-preview' }, h(PetSprite, { asset: assets?.selected, mark: pet.mark, size: 112, pose: 'idle' })),
           h('div', { className: 'deck-pet-options' }, h('input', { type: 'search', className: 'bt-input', placeholder: '搜索宠物名称', 'aria-label': '搜索宠物名称', value: search, onChange: event => setSearch(event.target.value) }),
             h('select', { className: 'bt-input', size: 7, 'aria-label': '宠物外观', value: pet.skin ?? '', disabled, onChange: event => act(() => api.pet({ skin: event.target.value || null })) },
               h('option', { value: '' }, '内置 DS-Bot 宠物'), missingChoice ? h('option', { value: pet.skin, disabled: true }, `${pet.skin}（当前选择）`) : null,
               pets.map(entry => h('option', { key: entry.key, value: entry.key, disabled: !entry.available, title: entry.error ?? entry.key }, `${entry.name}${entry.available ? '' : ' · 不兼容'}`))))),
-        h('p', { className: 'deck-hint' }, '只读兼容 Codex 的 pet.json 与标准 WebP 精灵，不复制或上传合集。悬停四色灯打开对象气泡，离开灯与气泡十秒后收起。')),
+        h('details', { className: 'deck-builtin-picker' }, h('summary', null, 'DS-Bot 内置宠物与颜色'), grid(petLook, choosePetMark)),
+        h('p', { className: 'deck-hint' }, '选择内置形状或颜色即切换到内置宠物。只读兼容 Codex 的 pet.json 与标准 WebP 精灵，不复制或上传合集。只有非零四色灯显示，悬停打开对象气泡，离开灯与气泡十秒后收起。')),
       assets?.warnings.length ? h('div', { className: 'deck-asset-warnings', role: 'status' }, assets.warnings.map(message => h('p', { key: message, className: 'deck-hint' }, message))) : null,
       error ? h('p', { className: 'deck-error', role: 'alert' }, error) : null,
       h('footer', null, h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: close }, '完成'))))

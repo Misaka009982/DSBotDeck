@@ -23,6 +23,14 @@ export function petRegion(regions: PetRegions, point: Point): PetRegion {
   if (regions.controls.some(control => contains(control, point))) return 'controls'
   return regions.body && contains(regions.body, point) ? 'body' : 'none'
 }
+export function petToolbarVisible(body: Bounds | null, toolbar: Bounds | null, point: Point, shown: boolean): boolean {
+  if (!body) return false
+  if (contains(body, point)) return true
+  if (!shown || !toolbar) return false
+  // 已从主体打开后，跨过主体与按钮之间的小空隙时保持可点。
+  const left = Math.min(body.x, toolbar.x); const top = Math.min(body.y, toolbar.y)
+  return contains({ x: left, y: top, width: Math.max(body.x + body.width, toolbar.x + toolbar.width) - left, height: Math.max(body.y + body.height, toolbar.y + toolbar.height) - top }, point)
+}
 export const petInteractive = (region: PetRegion, locked: boolean): boolean => region === 'controls' || region === 'body' && !locked
 export function dragBounds(origin: Bounds, start: Point, current: Point): Bounds {
   return { ...origin, x: Math.round(origin.x + current.x - start.x), y: Math.round(origin.y + current.y - start.y) }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { command, frozenRequest, pairingText, relayUrl, savedClient, selection, validServerId } from '../src/shared/validation.ts'
+import { PICKER_SHAPES, CHARACTER_COLORS } from '@dsbot/characters'
+import { command, frozenRequest, localMark, pairingText, relayUrl, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
 import { defaultAppearance, defaultClient } from '../src/shared/domain.ts'
 
 test('服务器保留字和无效目标被拒绝', () => {
@@ -38,6 +39,7 @@ test('旧版本本机配置补默认外观但不重置宠物或身份', () => {
   assert.deepEqual(loaded.appearance, defaultAppearance())
   assert.equal(loaded.pet.enabled, true); assert.equal(loaded.pet.locked, true)
   assert.equal(loaded.pet.skin, null); assert.equal(loaded.pet.size, 112)
+  assert.equal(loaded.pet.mark, null); assert.equal(loaded.appearance.builtinIcon, null)
   assert.deepEqual(loaded.pet.position, { x: 20, y: 30 })
 })
 test('窗口旧矩形继续兼容，新配置保留最大化且无效坐标不传给系统', () => {
@@ -46,6 +48,17 @@ test('窗口旧矩形继续兼容，新配置保留最大化且无效坐标不�
   assert.deepEqual(savedClient({ ...client, window: { ...rectangle, maximized: true } }).window, { ...rectangle, maximized: true })
   assert.equal(savedClient({ ...client, window: { ...rectangle, maximized: 'true' } }).window?.maximized, false)
   assert.equal(savedClient({ ...client, window: { ...rectangle, x: NaN } }).window, null)
+})
+test('本机内置外观复用上游全部形状与配色，拒绝未知标识和超大图片', () => {
+  for (const shape of PICKER_SHAPES) for (const color of CHARACTER_COLORS) assert.deepEqual(localMark({ shape, color }), { shape, color })
+  assert.throws(() => localMark({ shape: '../custom.svg', color: 'blue' }))
+  assert.throws(() => localMark({ shape: 'whale', color: 'url(https://example/x)' }))
+  assert.throws(() => savedBuiltinIcon({ look: { shape: 'whale', color: 'blue' }, png: 'data:image/svg+xml,<svg/>' }))
+  assert.throws(() => savedBuiltinIcon({ look: { shape: 'whale', color: 'blue' }, png: 'A'.repeat(400004) }))
+  const client = defaultClient()
+  const next = savedClient({ ...client, pet: { ...client.pet, mark: { shape: 'kitty', color: 'aurora' } } })
+  assert.deepEqual(next.pet.mark, { shape: 'kitty', color: 'aurora' })
+  assert.deepEqual(next.servers, client.servers)
 })
 test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
   const client = defaultClient()

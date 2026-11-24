@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 主窗口只拿公开快照和有名操作，不能指定任意 IPC 通道。
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ContentCommand, LocalAssetsView, Selection, Snapshot, UiLanguage } from '../shared/domain.ts'
+import type { ContentCommand, LocalAssetsView, LocalMark, Selection, Snapshot, UiLanguage } from '../shared/domain.ts'
 const subscribe = <T>(channel: string, listener: (value: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, value: T) => listener(value)
   ipcRenderer.on(channel, handler)
@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('dsbotDeck', {
   onAssets: (listener: (value: LocalAssetsView) => void) => subscribe('deck:local-assets', listener),
   onSettings: (listener: () => void) => subscribe('deck:open-settings', listener),
   assets: () => invoke('assets'),
+  rasterIcon: (revision: string, png: string) => invoke('icon-raster', { revision, png }),
+  builtinIcon: (look: LocalMark, png: string) => invoke('builtin-icon', { look, png }),
   chooseAsset: (kind: 'icon' | 'background' | 'pets') => invoke('choose-asset', { kind }),
   resetAsset: (kind: 'icon' | 'background' | 'pets') => invoke('reset-asset', { kind }),
   refreshAssets: () => invoke('refresh-assets'),
@@ -28,7 +30,7 @@ contextBridge.exposeInMainWorld('dsbotDeck', {
   select: (value: Selection) => invoke('select', value),
   navigate: (serverId: string, value: ContentCommand) => invoke('navigate', { serverId, command: value }),
   follow: (serverId: string, key: string, followed: boolean) => invoke('follow', { serverId, key, followed }),
-  pet: (patch: { enabled?: boolean; locked?: boolean; alwaysOnTop?: boolean; skin?: string | null; size?: number }) => invoke('pet', patch),
+  pet: (patch: { enabled?: boolean; locked?: boolean; alwaysOnTop?: boolean; skin?: string | null; size?: number; mark?: LocalMark | null }) => invoke('pet', patch),
   reopen: (serverId: string) => invoke('reopen', { serverId }),
   quit: () => invoke('quit'),
   viewport: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.send('deck:viewport', bounds),

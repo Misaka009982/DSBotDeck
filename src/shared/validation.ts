@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AppearanceSettings, Bounds, ContentCommand, EntityKind, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
+import type { AppearanceSettings, Bounds, BuiltinIcon, ContentCommand, EntityKind, LocalMark, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
+import { isColor, PICKER_SHAPES } from '@dsbot/characters'
 import { defaultAppearance } from './domain.ts'
 
 export const MAX_SERVERS = 32
@@ -126,6 +127,22 @@ export function petSkin(value: unknown): string | null {
   if (typeof value !== 'string' || value.length === 0 || value.length > 160 || value === '.' || value === '..' || /[\\/:\u0000-\u001f]/.test(value)) throw new DeckError('bot/invalid', '宠物编号无效。')
   return value
 }
+export function localMark(value: unknown): LocalMark | null {
+  if (value === undefined || value === null) return null
+  const entry = record(value)
+  if (!entry || typeof entry.shape !== 'string' || !PICKER_SHAPES.includes(entry.shape) || typeof entry.color !== 'string' || !isColor(entry.color)) throw new DeckError('bot/invalid', '请选择 DS-Bot 内置图标和有效颜色。')
+  return { shape: entry.shape, color: entry.color }
+}
+export function iconPng(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 400000 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) throw new DeckError('asset/invalid', '图标图片无效，请重新选择。')
+  return value
+}
+export function savedBuiltinIcon(value: unknown): BuiltinIcon | null {
+  if (value === undefined || value === null) return null
+  const entry = record(value); const look = localMark(entry?.look)
+  if (!look) throw new DeckError('asset/invalid', '内置图标选择无效，请重新选择。')
+  return { look, png: iconPng(entry?.png) }
+}
 export function savedAppearance(value: unknown): AppearanceSettings {
   const defaults = defaultAppearance()
   if (value === undefined) return defaults
@@ -135,7 +152,7 @@ export function savedAppearance(value: unknown): AppearanceSettings {
   if (language !== 'zh' && language !== 'zh-TW' && language !== 'en' && language !== 'ja' && language !== 'ko' && language !== 'es' && language !== 'fr' && language !== 'de' && language !== 'system') throw new DeckError('bot/invalid', '界面语言无效。')
   const opacity = entry.opacity ?? defaults.opacity; const blur = entry.blur ?? defaults.blur; const fit = entry.fit ?? defaults.fit
   if (!finite(opacity) || opacity < 0 || opacity > 1 || !finite(blur) || blur < 0 || blur > 24 || (fit !== 'cover' && fit !== 'contain')) throw new DeckError('bot/invalid', '背景透明度、模糊或布局无效。')
-  return { language, iconPath: localPath(entry.iconPath), backgroundPath: localPath(entry.backgroundPath), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
+  return { language, iconPath: localPath(entry.iconPath), builtinIcon: savedBuiltinIcon(entry.builtinIcon), backgroundPath: localPath(entry.backgroundPath), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
 }
 export function savedClient(value: unknown): SavedClient {
   const item = record(value)
@@ -151,7 +168,7 @@ export function savedClient(value: unknown): SavedClient {
   return {
     version: 1, servers,
     selected: chosen && servers.some(server => server.id === chosen.serverId) ? chosen : null,
-    pet: { enabled: pet.enabled === true, locked: pet.locked === true, alwaysOnTop: pet.alwaysOnTop !== false, position: point(pet.position), skin: petSkin(pet.skin), size },
+    pet: { enabled: pet.enabled === true, locked: pet.locked === true, alwaysOnTop: pet.alwaysOnTop !== false, position: point(pet.position), skin: petSkin(pet.skin), size, mark: localMark(pet.mark) },
     appearance: savedAppearance(item.appearance), window: windowState(item.window),
   }
 }

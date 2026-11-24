@@ -8,6 +8,8 @@ import { groupEntities, serverLabel, settingsCommand, visibleServers } from '../
 import { backgroundLevels } from '../shared/appearance.ts'
 import { DeckSettings } from './deck-settings.js'
 import { useDeckLocale } from './deck-locale.js'
+import { readPairingImage } from './pairing-image.js'
+import { rasterizeIcon } from './builtin-icon.js'
 const api = window.dsbotDeck
 const COLOR_LABELS = { green: '运行', yellow: '待交互', red: '明确失败', blue: '完成待查看' }
 function storedCollapse() { try { return JSON.parse(localStorage.getItem('dsbotdeck.tree-collapsed') ?? '{}') } catch { return {} } }
@@ -31,13 +33,30 @@ function useTheme(prefs) {
 function Sheet({ mode, server, busy, error, run, close }) {
   const [alias, setAlias] = useState(server?.alias ?? '')
   const [uri, setUri] = useState('')
+  const [readingImage, setReadingImage] = useState(false)
+  const [imageError, setImageError] = useState(null)
+  const imageInput = useRef(null)
+  const imageRead = useRef(null)
+  useEffect(() => () => { imageRead.current?.abort() }, [])
+  const importImage = async file => {
+    if (!file || busy || readingImage) return
+    const controller = new AbortController(); imageRead.current?.abort(); imageRead.current = controller
+    setReadingImage(true); setImageError(null)
+    try { const value = await readPairingImage(file, controller.signal); if (!controller.signal.aborted) setUri(value) }
+    catch (failure) { if (!controller.signal.aborted) setImageError(failure.message) }
+    finally { if (!controller.signal.aborted) { imageRead.current = null; setReadingImage(false) } }
+  }
+  const pasteImage = event => {
+    const file = [...event.clipboardData.items].find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile()
+    if (file) { event.preventDefault(); void importImage(file) }
+  }
   const first = useRef(null)
   useEffect(() => {
     const before = document.activeElement; first.current?.focus()
     const key = event => {
       if (event.key === 'Escape' && !busy) { event.preventDefault(); close() }
       if (event.key === 'Tab') {
-        const items = [...document.querySelectorAll('.deck-sheet :is(button,input,textarea)')].filter(item => !item.disabled)
+        const items = [...document.querySelectorAll('.deck-sheet :is(button,input,textarea)')].filter(item => !item.disabled && item.checkVisibility())
         if (items.length > 0 && event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1).focus() }
         else if (items.length > 0 && !event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus() }
       }
@@ -46,6 +65,7 @@ function Sheet({ mode, server, busy, error, run, close }) {
   }, [busy])
   const submit = event => {
     event.preventDefault()
+    if (readingImage) return
     if (mode === 'pair' || mode === 'repair') { const offer = uri; setUri(''); void run(() => api.pair(offer, alias, mode === 'repair' ? server.id : undefined), true) }
     else if (mode === 'rename') void run(() => api.rename(server.id, alias), true)
     else if (mode === 'forget') void run(() => api.forget(server.id), true)
@@ -56,14 +76,18 @@ function Sheet({ mode, server, busy, error, run, close }) {
       h('header', null, h('h2', { id: 'deck-sheet-title' }, title), button('关闭', close, CloseIcon, { disabled: busy })),
       h('form', { onSubmit: submit },
         mode !== 'forget' ? h('label', { className: 'deck-field' }, '本机别名', h('input', { ref: first, className: 'bt-input', value: alias, maxLength: 80, disabled: busy, onChange: event => setAlias(event.target.value), autoComplete: 'off' })) : null,
-        mode === 'pair' || mode === 'repair' ? h('div', null,
-          h('label', { className: 'deck-field' }, '配对链接', h('textarea', { className: 'bt-input', value: uri, maxLength: 8192, rows: 4, spellCheck: false, autoComplete: 'off', disabled: busy, placeholder: 'dsbot://pair?... 或包含配对片段的浏览器链接', onChange: event => setUri(event.target.value) })),
-          h('p', { className: 'deck-hint' }, '完整管理需手机配对二维码对应的 dsbot://pair 文本，可用手机扫码工具读取后粘贴。上游“复制浏览器链接”只有浏览器权限，Windows Hello 不会为它提权。'),
+        mode === 'pair' || mode === 'repair' ? h('div', { onPaste: pasteImage },
+          h('label', { className: 'deck-field' }, '配对链接', h('textarea', { className: 'bt-input', value: uri, maxLength: 8192, rows: 4, spellCheck: false, autoComplete: 'off', disabled: busy || readingImage, placeholder: '粘贴配对链接，或粘贴二维码截图', onChange: event => setUri(event.target.value) })),
+          h('div', { className: 'deck-setting-actions' },
+            h('input', { ref: imageInput, type: 'file', hidden: true, accept: 'image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp', onChange: event => { const file = event.target.files?.[0]; event.target.value = ''; void importImage(file) } }),
+            h('button', { type: 'button', className: 'bt-soft', disabled: busy || readingImage, onClick: () => imageInput.current?.click() }, readingImage ? '正在本机识别…' : '从截图识别二维码')),
+          imageError ? h('p', { className: 'deck-error', role: 'alert' }, imageError) : null,
+          h('p', { className: 'deck-hint' }, '支持 PNG、JPEG、WebP，可在链接框粘贴截图。只在本机识别，填入后点击保存连接。完整管理需手机配对码；浏览器链接仍只有浏览器权限。'),
           h('p', { className: 'deck-hint' }, '请只连接可信的服务器。配对链接不保存、不写日志；不要把二维码或链接上传到外部服务。')) : null,
         mode === 'forget' ? h('p', null, `仅删除本客户端保存的「${server.alias}」连接身份，不停止远程 Bot，也不会撤销服务器端的设备授权。撤销旧设备须在服务器本机操作。`) : null,
         error ? h('p', { className: 'deck-error', role: 'alert' }, error) : null,
         h('footer', null, h('button', { type: 'button', className: 'bt-soft', onClick: close, disabled: busy }, '取消'),
-          h('button', { ref: mode === 'forget' ? first : undefined, type: 'submit', className: 'bt-send', disabled: busy || (mode === 'pair' || mode === 'repair') && uri.trim() === '' }, busy ? '处理中…' : mode === 'forget' ? '仅忘记本机连接' : '保存')))))
+          h('button', { ref: mode === 'forget' ? first : undefined, type: 'submit', className: 'bt-send', disabled: busy || readingImage || (mode === 'pair' || mode === 'repair') && uri.trim() === '' }, busy ? '处理中…' : mode === 'forget' ? '仅忘记本机连接' : '保存')))))
 }
 export function App() {
   const [snapshot, setSnapshot] = useState(null)
@@ -93,6 +117,14 @@ export function App() {
     measure(); const observer = new ResizeObserver(measure); if (viewport.current) observer.observe(viewport.current)
     window.addEventListener('resize', measure); return () => { observer.disconnect(); window.removeEventListener('resize', measure) }
   }, [])
+  useEffect(() => {
+    if (!assets?.icon || !assets.iconNeedsRaster) return
+    let stopped = false
+    void rasterizeIcon(assets.icon).then(png => stopped ? null : api.rasterIcon(assets.revision, png)).then(result => {
+      if (!stopped && result && !result.ok) setError(result.error.message)
+    }).catch(() => { if (!stopped) setError('WebP 图标无法解码，请重新选择完整图片。') })
+    return () => { stopped = true }
+  }, [assets?.revision, assets?.iconNeedsRaster])
   useEffect(() => { api.overlay(sheet !== null); return () => api.overlay(false) }, [sheet !== null])
   useEffect(() => { try { localStorage.setItem('dsbotdeck.sidebar-rail', String(rail)) } catch {} }, [rail])
   useEffect(() => { try { localStorage.setItem('dsbotdeck.tree-collapsed', JSON.stringify(collapsed)) } catch {} }, [collapsed])
@@ -128,9 +160,9 @@ export function App() {
       h('label', { className: 'deck-search' }, h(SearchIcon), h('input', { type: 'search', placeholder: '搜索服务器、Bot 或群聊', 'aria-label': '搜索服务器、Bot 或群聊', value: search, onChange: event => setSearch(event.target.value) })),
       h('nav', { ref: tree, id: 'deck-server-tree', className: 'deck-tree', role: 'tree', 'aria-label': '远程服务器与 Bot', onKeyDown: keyNav },
         servers.map(server => {
-          const open = Boolean(search) || !collapsed[server.id]
+          const open = rail || Boolean(search) || !collapsed[server.id]
           const query = server.alias.toLocaleLowerCase().includes(search.toLocaleLowerCase()) ? '' : search
-          return h('section', { key: server.id, className: 'deck-server', role: 'treeitem', 'aria-expanded': !rail && open, 'aria-label': server.alias },
+          return h('section', { key: server.id, className: 'deck-server', role: 'treeitem', 'aria-expanded': open, 'aria-label': server.alias },
             h('div', { className: 'deck-server-head' },
               h('button', { type: 'button', 'data-nav': '', className: 'deck-disclose', 'aria-expanded': open, 'aria-label': `${open ? '折叠' : '展开'} ${server.alias}`, onClick: () => toggle(server.id), onKeyDown: event => { if (event.key === 'ArrowLeft' && open || event.key === 'ArrowRight' && !open) { event.preventDefault(); toggle(server.id) } } }, h(open ? ChevronDownIcon : ChevronRightIcon)),
               h(MonitorIcon), h('button', { type: 'button', 'data-nav': '', className: 'deck-server-title', title: server.alias, 'aria-label': server.alias, onClick: () => { if (rail) { setRail(false); setCollapsed(value => ({ ...value, [server.id]: false })) } else toggle(server.id) } }, rail ? h(MonitorIcon) : null, h('strong', null, server.alias), h('span', { title: server.error ?? undefined }, server.cached && server.team ? `${serverLabel(server.state)} · 缓存` : serverLabel(server.state))),
@@ -147,13 +179,13 @@ export function App() {
             open ? h('div', { role: 'group', className: 'deck-server-body' },
               server.error ? h('p', { className: 'deck-server-error' }, server.error) : null,
               groupEntities(server.team, query).map(group => {
-                const groupKey = `${server.id}:${group.id}`; const expanded = Boolean(search) || !collapsed[groupKey]
+                const groupKey = `${server.id}:${group.id}`; const expanded = rail || Boolean(search) || !collapsed[groupKey]
                 return h('div', { key: group.id, role: 'treeitem', 'aria-expanded': expanded, 'aria-label': group.label },
                   h('button', { type: 'button', 'data-nav': '', className: 'deck-group', 'aria-expanded': expanded, onClick: () => toggle(groupKey) }, h(expanded ? ChevronDownIcon : ChevronRightIcon), group.label, h('span', null, group.entities.length)),
                   expanded ? h('div', { role: 'group' }, group.entities.map(entity => {
                     const selected = snapshot.selected?.serverId === server.id && snapshot.selected.kind === entity.kind && snapshot.selected.id === entity.id
                     return h('div', { key: entity.key, className: 'deck-node', 'data-selected': selected || undefined },
-                      h('button', { type: 'button', role: 'treeitem', 'aria-selected': selected, 'data-nav': '', className: 'deck-node-open', onClick: () => select(server, entity), title: `${entity.name} · ${entity.detail}${server.cached ? ' · 缓存，待确认' : ''}` },
+                      h('button', { type: 'button', role: 'treeitem', 'aria-selected': selected, 'data-nav': '', className: 'deck-node-open', onClick: () => select(server, entity), 'aria-label': `${server.alias} · ${entity.name}`, title: `${server.alias} · ${entity.name} · ${entity.detail}${server.cached ? ' · 缓存，待确认' : ''}` },
                         entity.kind === 'room' ? h('span', { className: 'deck-room-mark' }, h(PeopleIcon)) : h(BotAvatar, { bot: entity, size: 28, main: entity.main, live: !server.cached }),
                         h('span', { className: 'deck-node-copy' }, h('span', { className: 'deck-node-name' }, entity.name), h('span', { className: 'deck-node-detail' }, entity.detail)),
                         entity.task ? h('span', { className: 'deck-lamp', 'data-color': entity.task, 'data-cached': server.cached || undefined, role: 'img', 'aria-label': `${COLOR_LABELS[entity.task]}${server.cached ? '（缓存）' : ''}` }) : null),

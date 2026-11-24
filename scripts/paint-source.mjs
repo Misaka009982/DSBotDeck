@@ -33,7 +33,20 @@ export function paintSource(source, id, root) {
     for (const [before, after] of scoped) source = replaceOnce(source, before, after)
     return source
   }
-  if (['app/ui/src/chat.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js'].includes(name)) source = source.replaceAll('\r\n', '\n')
+  if (['app/ui/src/chat.js', 'app/ui/src/team.js', 'ds-bot/src/client/activity-row.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js'].includes(name)) source = source.replaceAll('\r\n', '\n')
+  if (name === 'app/ui/src/team.js') {
+    source = replaceOnce(source,
+      "      actions.noteLive(part, 'tool', doing?.tool ? { label: workPhrase(doing), state: toolState(doing.tool) } : null)",
+      "      const tool = workToolNote(doing)\n      actions.noteLive(part, 'tool', tool ? { ...tool, state: toolState(tool.tool) } : null)")
+    source = replaceOnce(source,
+      '      setStatus(part, { running: busy })',
+      "      setStatus(part, { running: busy })\n      const tool = workToolNote(rooms[room.id], r.byId)\n      actions.noteLive(part, 'tool', tool ? { ...tool, state: toolState(tool.tool) } : null)")
+    return "import { workToolNote } from '@dsbotdeck/tool-model'\n" + source
+  }
+  if (name === 'ds-bot/src/client/activity-row.js') {
+    source = replaceOnce(source, 'inputAt > (tool?.at ?? 0)', 'preferInputStatus(inputAt, tool)')
+    return "import { preferInputStatus } from '@dsbotdeck/tool-model'\n" + source
+  }
   if (name === 'ds-bot/src/client/cells.js') {
     const anchor = "    case 'divider': return h(PartLine, { key, time: row.time })"
     source = replaceOnce(source, anchor, `    case 'steps': return h(ToolSteps, { key, entry: row })\n${anchor}`)

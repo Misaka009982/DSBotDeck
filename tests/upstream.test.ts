@@ -112,6 +112,23 @@ test('主聊天与群聊读取工具步骤，聊天和任务使用同一只读�
   assert.equal(adaptUiSource('@dsbotdeck/tool-steps', undefined, client, source), path.join(client, 'src/remote/tool-steps.js'))
   assert.equal(adaptUiSource('@dsbotdeck/tool-refresh', undefined, client, source), path.join(client, 'src/shared/tool-refresh.ts'))
 })
+test('实时工具接入普通聊天与群聊，追加输入不盖住当前服务器工具', async () => {
+  for (const name of ['app/ui/src/team.js', 'ds-bot/src/client/activity-row.js']) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const next = paintSource(raw, path.join(source, name), source)
+    assert.ok(next !== null)
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+    assert.throws(() => paintSource('changed UI', path.join(source, name), source), /结构已变化/)
+    assert.throws(() => paintSource(`${raw}\n${raw}`, path.join(source, name), source), /结构已变化/)
+    if (name.endsWith('team.js')) {
+      assert.ok(next.includes('workToolNote(doing)'))
+      assert.ok(next.includes('workToolNote(rooms[room.id], r.byId)'))
+    } else assert.ok(next.includes('preferInputStatus(inputAt, tool)'))
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  }
+  assert.equal(adaptUiSource('@dsbotdeck/tool-model', undefined, client, source), path.join(client, 'src/shared/tool-model.ts'))
+  assert.equal(adaptUiSource('@dsbot/characters', undefined, client, source), path.join(source, 'ds-bot/src/client/characters.js'))
+})
 test('工具展示接入结构变化时停止，不猜测界面入口', () => {
   for (const name of ['app/ui/src/chat.js', 'ds-bot/src/client/cells.js', 'ds-bot/src/client/bot-tasks.js']) assert.throws(() => paintSource('changed UI', path.join(source, name), source), /结构已变化/)
 })

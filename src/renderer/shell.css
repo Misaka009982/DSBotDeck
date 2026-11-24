@@ -93,11 +93,21 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .deck-pet-options{display:flex;flex:1;min-width:0;flex-direction:column;gap:8px}
 .deck-pet-options select{width:100%;min-height:148px}
 .deck-settings select,.deck-settings input{font:inherit;color:var(--bt-ink);background:var(--bt-main)}
+.deck-builtin-picker{margin:10px 0}
+.deck-builtin-picker>summary{cursor:pointer;color:var(--bt-ink-2);font-size:12px;padding:5px 0}
+.deck-character-grid{border:0;margin:8px 0 0;padding:0;min-width:0;max-width:280px}
+.deck-character-grid:disabled{opacity:.65}
 .deck-settings input[type=range]{width:100%;accent-color:var(--bt-accent)}
 .deck-settings footer{display:flex;justify-content:flex-end;margin-top:14px}
 .deck-asset-warnings{border-top:1px solid var(--bt-line)}
 .deck-frame[data-rail] .deck-brand{padding:0;justify-content:center;gap:0}
-.deck-frame[data-rail] .deck-brand>:is(.deck-app-icon,.bt-mark,.deck-brand-name,.deck-add-server),.deck-frame[data-rail] .deck-search,.deck-frame[data-rail] .deck-server-body,.deck-frame[data-rail] .deck-server-menu,.deck-frame[data-rail] .deck-server-head>:is(.deck-disclose,svg,.deck-server-settings,.deck-server-operations),.deck-frame[data-rail] .deck-server-title>:is(strong,span){display:none}
+.deck-frame[data-rail] .deck-brand>:is(.deck-app-icon,.bt-mark,.deck-brand-name,.deck-add-server),.deck-frame[data-rail] .deck-search,.deck-frame[data-rail] .deck-server-menu,.deck-frame[data-rail] .deck-server-head>:is(.deck-disclose,svg,.deck-server-settings,.deck-server-operations),.deck-frame[data-rail] .deck-server-title>:is(strong,span){display:none}
+.deck-frame[data-rail] .deck-server-body{margin:0;padding:0;border:0}
+.deck-frame[data-rail] .deck-server-body :is(.deck-group,.deck-node-copy,.deck-entity-settings,.deck-follow,.deck-hint,.deck-server-error){display:none}
+.deck-frame[data-rail] .deck-server-body>[role=treeitem]+[role=treeitem]{border-top:1px solid var(--bt-line);margin-top:4px;padding-top:4px}
+.deck-frame[data-rail] .deck-node{min-height:40px}
+.deck-frame[data-rail] .deck-node-open{position:relative;min-height:40px;padding:4px;justify-content:center;gap:0}
+.deck-frame[data-rail] .deck-node-open>.deck-lamp{position:absolute;right:1px;bottom:3px;border:2px solid var(--bt-sidebar)}
 .deck-frame[data-rail] .deck-server-head{justify-content:center}
 .deck-frame[data-rail] .deck-server-title{flex:none;width:32px;height:34px;align-items:center;justify-content:center;border-radius:8px}
 .deck-frame[data-rail] .deck-server-title:hover{background:var(--bt-hover)}

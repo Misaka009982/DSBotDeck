@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { LocalAssets, localFile, readImage, webpSize } from '../src/main/local-assets.ts'
+import { builtinIconBytes, LocalAssets, localFile, readImage, webpSize } from '../src/main/local-assets.ts'
 import { defaultAppearance } from '../src/shared/domain.ts'
 import { backgroundLevels } from '../src/shared/appearance.ts'
 import { petPose, spriteFrame } from '../src/shared/pet-sprite.ts'
@@ -20,6 +20,34 @@ test('WebP 尺寸区分原生九行与十一行，不把小图当精灵', () => 
   assert.deepEqual(webpSize(sheet()), { width: 1536, height: 1872 })
   assert.deepEqual(webpSize(sheet(1536, 2288)), { width: 1536, height: 2288 })
   assert.equal(webpSize(Buffer.from('not-a-webp')), null)
+})
+test('内置图标仅接收有预算的标准 PNG，固定资源不向宠物公开程序图标', async () => {
+  const png = Buffer.alloc(24)
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png); png.write('IHDR', 12)
+  png.writeUInt32BE(256, 16); png.writeUInt32BE(256, 20)
+  assert.deepEqual(builtinIconBytes(png.toString('base64')), png)
+  assert.throws(() => builtinIconBytes(Buffer.from('<svg/>').toString('base64')))
+  const large = Buffer.from(png); large.writeUInt32BE(40000, 16)
+  assert.throws(() => builtinIconBytes(large.toString('base64')))
+  assert.throws(() => builtinIconBytes(Buffer.alloc(300001).toString('base64')))
+  const root = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-icons-'))
+  try {
+    const assets = new LocalAssets(root)
+    await assets.refresh({ ...defaultAppearance(), builtinIcon: { look: { shape: 'whale', color: 'blue' }, png: png.toString('base64') } }, null)
+    assert.ok(assets.view('shell').icon)
+    assert.equal(assets.response('shell', '/local/icon', 'GET').headers.get('content-type'), 'image/png')
+    assert.equal(assets.response('pet', '/local/icon', 'GET').status, 404)
+    const file = path.join(root, 'icon.webp'); await writeFile(file, sheet(256, 256))
+    const settings = { ...defaultAppearance(), iconPath: file }
+    await assets.refresh(settings, null)
+    const old = assets.view('shell').revision
+    assert.equal(assets.view('shell').iconNeedsRaster, true); assert.equal(assets.view('pet').iconNeedsRaster, false)
+    await assets.refresh(settings, null)
+    assert.equal(assets.setIconRaster(old, png), false)
+    assert.equal(assets.setIconRaster(assets.view('shell').revision, png), true)
+    assert.equal(assets.view('shell').iconNeedsRaster, false)
+    assert.deepEqual(assets.iconBytes(), png)
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 test('本机文件拒绝越界、URL、设备路径和超出预算', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-assets-'))

@@ -26,5 +26,6 @@ export function ToolSteps({ entry }) {
           h('code', { className: 'deck-tool-name' }, tool.name ?? '工具名未提供'),
           tool.label && tool.label !== tool.name ? h('span', { className: 'deck-tool-label' }, hostText(tool.label)) : null),
         h('span', { className: 'deck-tool-outcome', title: outcome.hint }, outcome.text))
-    })))
+    })),
+    h('p', { className: 'deck-tool-limit' }, '当前服务器未提供调用参数和完整输出。“未确认”表示没有返回明确结果。'))
 }

@@ -71,7 +71,8 @@ export class ServerManager {
       tasks.push({ serverId: server.id, kind: entity.kind, id: entity.id, key: entity.key, title: entity.name, serverAlias: server.alias, color: entity.task, detail: entity.detail, cached: server.cached })
     }
     const local = this.vault.snapshot()
-    return { revision: this.revision, servers, activeServerId: this.active, selected: this.currentSelection(), pet: local.pet, appearance: local.appearance, tasks, counts, startupError: this.startupError }
+    const { builtinIcon, ...appearance } = local.appearance
+    return { revision: this.revision, servers, activeServerId: this.active, selected: this.currentSelection(), pet: local.pet, appearance: { ...appearance, builtinIcon: builtinIcon ? { look: builtinIcon.look } : null }, tasks, counts, startupError: this.startupError }
   }
   async pair(input: unknown, alias: unknown, repairId?: unknown): Promise<string> {
     if (this.startupError) throw new DeckError('vault/unavailable', this.startupError)

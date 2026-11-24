@@ -49,6 +49,11 @@ export async function localFile(root: string, child: string, limit: number): Pro
   if (!info.isFile() || info.size <= 0 || info.size > limit) throw new DeckError('asset/budget', '素材文件大小超出限制。')
   return canonical
 }
+export function builtinIconBytes(value: string): Buffer {
+  const bytes = Buffer.from(value, 'base64')
+  if (bytes.length < 24 || bytes.length > 300000 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) || bytes.toString('ascii', 12, 16) !== 'IHDR' || bytes.readUInt32BE(16) !== 256 || bytes.readUInt32BE(20) !== 256) throw new DeckError('asset/invalid', '内置图标必须是 256×256 PNG。')
+  return bytes
+}
 export function webpSize(bytes: Buffer): { width: number; height: number } | null {
   if (bytes.length < 30 || bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WEBP') return null
   const kind = bytes.toString('ascii', 12, 16)
@@ -117,12 +122,19 @@ export class LocalAssets {
   private selected: SkinAsset | null = null
   constructor(defaultLibrary: string) { this.defaultLibrary = defaultLibrary }
   iconBytes(): Buffer | null { return this.icon?.bytes ?? null }
+  iconNeedsRaster(): boolean { return this.icon?.type === 'image/webp' }
+  setIconRaster(revision: string, bytes: Buffer): boolean {
+    if (revision !== this.revision || !this.iconNeedsRaster()) return false
+    this.icon = { bytes, type: 'image/png' }; this.revision = randomUUID()
+    return true
+  }
   hasBackground(): boolean { return this.background !== null }
   warn(message: string): void { if (!this.warnings.includes(message)) this.warnings.push(message) }
   async refresh(settings: AppearanceSettings, skin: string | null): Promise<void> {
     const pets: LocalAssetsView['pets'] = []; const warnings: string[] = []
     let icon: ImageAsset | null = null; let background: ImageAsset | null = null; let selected: SkinAsset | null = null
-    if (settings.iconPath) { try { icon = await readImage(settings.iconPath, true) } catch { warnings.push('自定义图标不可用，已回退内置图标。') } }
+    if (settings.builtinIcon) { try { icon = { bytes: builtinIconBytes(settings.builtinIcon.png), type: 'image/png' } } catch { warnings.push('所选内置图标不可用，请重新选择图标。') } }
+    else if (settings.iconPath) { try { icon = await readImage(settings.iconPath, true) } catch { warnings.push('自定义图标不可用，已回退内置图标。') } }
     if (settings.backgroundPath) { try { background = await readImage(settings.backgroundPath) } catch { warnings.push('背景图片不可用，已回退原主题背景。') } }
     const libraryPath = settings.petLibraryPath ?? this.defaultLibrary
     try {
@@ -144,7 +156,7 @@ export class LocalAssets {
   view(host: 'shell' | 'pet'): LocalAssetsView {
     const url = (name: string) => `${SCHEME}://${host}/local/${name}?v=${this.revision}`
     return {
-      revision: this.revision, icon: host === 'shell' && this.icon ? url('icon') : null, background: host === 'shell' && this.background ? url('background') : null,
+      revision: this.revision, icon: host === 'shell' && this.icon ? url('icon') : null, iconNeedsRaster: host === 'shell' && this.iconNeedsRaster(), background: host === 'shell' && this.background ? url('background') : null,
       libraryPath: host === 'shell' ? this.libraryPath : '', pets: host === 'shell' ? this.pets.map(pet => ({ ...pet })) : [],
       selected: this.selected ? { key: this.selected.key, name: this.selected.name, rows: this.selected.rows, url: url('pet.webp') } : null, warnings: host === 'shell' ? [...this.warnings] : [],
     }

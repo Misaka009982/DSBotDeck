@@ -2,8 +2,23 @@
 // 回归只作定义；不运行应用、工具或真实服务器。
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { toolSummaries } from '../src/shared/tool-model.ts'
+import { preferInputStatus, toolSummaries, workToolNote } from '../src/shared/tool-model.ts'
 
+test('当前工具原名优先于泛化说辞，新输入不遮住服务器仍报告的工具', () => {
+  const note = workToolNote({ tool: 'job_output', said: 'Weighing the options', since: 1 })
+  assert.deepEqual(note, { tool: 'job_output', label: '正在调用 job_output', current: true })
+  assert.equal(preferInputStatus(200, { ...note, at: 10 }), false)
+  assert.equal(preferInputStatus(200, { label: '旧本地状态', at: 10 }), true)
+  assert.equal(preferInputStatus(200, undefined), true)
+  assert.equal(workToolNote({ since: 1 }), null)
+  assert.equal(workToolNote({ tool: 'job_output', switching: true }), null)
+})
+test('群聊逐个标注正在用工具的成员，后台任务不冒充具体工具', () => {
+  const note = workToolNote([{ botId: 'a', tool: 'read_file', target: 'hello.ts' }, { botId: 'b', tool: 'job_output' }, { botId: 'c', since: 1 }], { a: { name: '甲' }, b: { name: '乙' } })
+  assert.equal(note?.label, '甲：正在调用 read_file · hello.ts；乙：正在调用 job_output')
+  assert.equal(workToolNote({ tool: 'task', note: '整理资料' })?.label, '后台任务 · 整理资料')
+  assert.equal(workToolNote([null, [], { tool: 1 }, { tool: '' }]), null)
+})
 test('工具名称与说明保留，仅真实布尔结果决定成功或失败', () => {
   assert.deepEqual(toolSummaries({ kind: 'steps', tools: [
     { name: 'read_file', label: 'Opening a file', ok: true },

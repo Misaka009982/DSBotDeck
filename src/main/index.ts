@@ -7,9 +7,9 @@ import { lstat, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import type { AppearanceSettings, BotResult, PetSettings } from '../shared/domain.ts'
-import { DeckError, errorCode, finite, localPath, petSkin, record, safeMessage, savedAppearance } from '../shared/validation.ts'
+import { DeckError, errorCode, finite, iconPng, localMark, localPath, petSkin, record, safeMessage, savedAppearance, savedBuiltinIcon } from '../shared/validation.ts'
 import { ContentViews } from './content-views.ts'
-import { LocalAssets, readImage } from './local-assets.ts'
+import { builtinIconBytes, LocalAssets, readImage } from './local-assets.ts'
 import { WindowsUnlock } from './native-unlock.ts'
 import { PetWindow } from './pet-window.ts'
 import { SCHEME, staticResponse } from './protocol.ts'
@@ -28,7 +28,7 @@ else void app.whenReady().then(start).catch(() => { app.quit() })
 
 function petPatch(value: unknown): Partial<Omit<PetSettings, 'position'>> {
   const input = record(value)
-  if (!input || Object.keys(input).some(key => !['enabled', 'locked', 'alwaysOnTop', 'skin', 'size'].includes(key))) throw new DeckError('bot/invalid', '宠物设置无效。')
+  if (!input || Object.keys(input).some(key => !['enabled', 'locked', 'alwaysOnTop', 'skin', 'size', 'mark'].includes(key))) throw new DeckError('bot/invalid', '宠物设置无效。')
   const patch: Partial<Omit<PetSettings, 'position'>> = {}
   for (const key of ['enabled', 'locked', 'alwaysOnTop'] as const) {
     if (input[key] === undefined) continue
@@ -36,6 +36,7 @@ function petPatch(value: unknown): Partial<Omit<PetSettings, 'position'>> {
     patch[key] = input[key]
   }
   if (input.skin !== undefined) patch.skin = petSkin(input.skin)
+  if (input.mark !== undefined) patch.mark = localMark(input.mark)
   if (input.size !== undefined) {
     if (!finite(input.size) || input.size < 72 || input.size > 144) throw new DeckError('bot/invalid', '宠物尺寸须在 72 到 144 之间。')
     patch.size = Math.round(input.size)
@@ -84,7 +85,7 @@ async function start(): Promise<void> {
     pet.updateAssets(assets.view('pet')); views?.sync()
   }
   const applyIcon = async () => {
-    const bytes = assets.iconBytes()
+    const bytes = assets.iconNeedsRaster() ? null : assets.iconBytes()
     const source = manager.appearanceSettings().iconPath
     const signature = bytes ? createHash('sha256').update(bytes).digest('hex') : 'default'
     if (signature === iconSignature) return
@@ -123,11 +124,14 @@ async function start(): Promise<void> {
     const selected = localPath(picked.filePaths[0])
     if (!selected) return null
     if (kind !== 'pets') {
-      await readImage(selected, kind === 'icon')
-      const image = nativeImage.createFromPath(selected)
-      if (image.isEmpty() || image.getSize().width * image.getSize().height > 40_000_000) throw new DeckError('asset/invalid', '图片无法解码或尺寸过大；原设置未修改。')
+      const asset = await readImage(selected, kind === 'icon')
+      // WebP 由 Chromium 解码；nativeImage 不支持它，窗口图标随后使用本机栅格化 PNG。
+      if (asset.type !== 'image/webp') {
+        const image = nativeImage.createFromPath(selected)
+        if (image.isEmpty() || image.getSize().width * image.getSize().height > 40_000_000) throw new DeckError('asset/invalid', '图片无法解码或尺寸过大；原设置未修改。')
+      }
     }
-    const patch: Partial<AppearanceSettings> = kind === 'icon' ? { iconPath: selected } : kind === 'background' ? { backgroundPath: selected } : { petLibraryPath: selected }
+    const patch: Partial<AppearanceSettings> = kind === 'icon' ? { iconPath: selected, builtinIcon: null } : kind === 'background' ? { backgroundPath: selected } : { petLibraryPath: selected }
     await manager.setAppearance(patch); await refreshAssets()
     return null
   }
@@ -136,7 +140,7 @@ async function start(): Promise<void> {
     const area = (saved ? screen.getDisplayMatching(saved) : screen.getPrimaryDisplay()).workArea
     const created = new BrowserWindow({
       ...restoreWindowBounds(saved, area), minWidth: Math.min(960, area.width), minHeight: Math.min(620, area.height), show: false, title: 'DSBotDeck',
-      icon: path.join(dist, 'assets/icon.ico'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#ffffff', symbolColor: '#333333', height: 48 },
+      icon: path.join(dist, 'assets/icon.ico'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#333333', height: 48 },
       backgroundColor: '#ffffff',
       webPreferences: { preload: path.join(dist, 'preload/shell.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false },
     })
@@ -190,11 +194,28 @@ async function start(): Promise<void> {
         if (changedSkin) await refreshAssets()
       })
       case 'assets': return assets.view('shell')
+      case 'icon-raster': return localAction(async () => {
+        if (args.revision !== assets.view('shell').revision || !assets.iconNeedsRaster()) return null
+        const bytes = builtinIconBytes(iconPng(args.png))
+        const image = nativeImage.createFromBuffer(bytes)
+        if (image.isEmpty() || image.getSize().width !== 256 || image.getSize().height !== 256) throw new DeckError('asset/invalid', '本机 WebP 图标无法解码。')
+        if (assets.setIconRaster(String(args.revision), bytes)) {
+          try { await applyIcon() } finally { publishAssets() }
+        }
+      })
+      case 'builtin-icon': return localAction(async () => {
+        const icon = savedBuiltinIcon(data.args)
+        if (!icon) throw new DeckError('asset/invalid', '请选择内置图标。')
+        const image = nativeImage.createFromBuffer(builtinIconBytes(icon.png))
+        const size = image.getSize()
+        if (image.isEmpty() || size.width !== 256 || size.height !== 256) throw new DeckError('asset/invalid', '内置图标无法解码；原图标未修改。')
+        await manager.setAppearance({ iconPath: null, builtinIcon: icon }); await refreshAssets()
+      })
       case 'choose-asset': return localAction(() => chooseAsset(args.kind))
       case 'refresh-assets': return localAction(refreshAssets)
       case 'reset-asset': return localAction(async () => {
         if (!['icon', 'background', 'pets'].includes(String(args.kind))) throw new DeckError('bot/invalid', '不能重置此素材。')
-        await manager.setAppearance(args.kind === 'icon' ? { iconPath: null } : args.kind === 'background' ? { backgroundPath: null } : { petLibraryPath: null })
+        await manager.setAppearance(args.kind === 'icon' ? { iconPath: null, builtinIcon: null } : args.kind === 'background' ? { backgroundPath: null } : { petLibraryPath: null })
         await refreshAssets()
       })
       case 'appearance': return localAction(async () => {
@@ -212,7 +233,7 @@ async function start(): Promise<void> {
   ipcMain.on('deck:theme', (event, value: unknown) => {
     const colors = record(value)
     if (owns(event) && window && typeof colors?.color === 'string' && typeof colors.ink === 'string' && /^#[a-f\d]{6}$/i.test(colors.color) && /^#[a-f\d]{6}$/i.test(colors.ink)) {
-      window.setTitleBarOverlay({ color: colors.color, symbolColor: colors.ink, height: 48 }); window.setBackgroundColor(colors.color)
+      window.setTitleBarOverlay({ color: '#00000000', symbolColor: colors.ink, height: 48 }); window.setBackgroundColor(colors.color)
     }
   })
   ipcMain.on('deck:content-ready', event => views?.ready(event))

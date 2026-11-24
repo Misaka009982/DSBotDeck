@@ -7,6 +7,7 @@
 .deck-tool-chevron{flex:none;font-size:16px;line-height:17px}
 .deck-tool-steps[open]>.deck-tool-heading .deck-tool-chevron{transform:rotate(90deg)}
 .deck-tool-list{display:flex;flex-direction:column;gap:5px;margin-top:5px}
+.deck-tool-limit{margin:5px 9px;color:var(--bt-ink-2);font-size:11px;line-height:1.6}
 .deck-tool-count{margin-left:auto;color:var(--bt-ink-3);white-space:nowrap;font-weight:400}
 .deck-tool-steps .bt-tread-step{align-items:flex-start;gap:8px;padding:6px 9px}
 .deck-tool-steps .bt-tread-step-name{flex:1;display:flex;flex-direction:column;gap:2px;overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere}

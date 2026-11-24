@@ -22,28 +22,33 @@ export interface SavedServer {
   unfollowed: string[]
 }
 export interface Selection { serverId: string; kind: EntityKind; id: string }
-export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null; skin: string | null; size: number }
+export interface LocalMark { shape: string; color: string }
+export interface BuiltinIcon { look: LocalMark; png: string }
+export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null; skin: string | null; size: number; mark: LocalMark | null }
 export type UiLanguage = 'zh' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'es' | 'fr' | 'de' | 'system'
 export interface AppearanceSettings {
   language: UiLanguage
   iconPath: string | null
+  builtinIcon: BuiltinIcon | null
   backgroundPath: string | null
   petLibraryPath: string | null
   opacity: number
   blur: number
   fit: 'cover' | 'contain'
 }
+export type AppearanceView = Omit<AppearanceSettings, 'builtinIcon'> & { builtinIcon: { look: LocalMark } | null }
 export interface PetSkinView { key: string; name: string; rows: number; url: string }
 export interface LocalAssetsView {
   revision: string
   icon: string | null
+  iconNeedsRaster: boolean
   background: string | null
   libraryPath: string
   pets: { key: string; name: string; available: boolean; error: string | null }[]
   selected: PetSkinView | null
   warnings: string[]
 }
-export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, backgroundPath: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
+export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
 export interface SavedClient {
   version: 1
   servers: SavedServer[]
@@ -108,7 +113,7 @@ export interface Snapshot {
   activeServerId: string | null
   selected: Selection | null
   pet: PetSettings
-  appearance: AppearanceSettings
+  appearance: AppearanceView
   tasks: PetTask[]
   counts: Counts
   startupError: string | null
@@ -119,5 +124,5 @@ export const emptyCounts = (): Counts => ({ green: 0, yellow: 0, red: 0, blue: 0
 export const entityKey = (kind: EntityKind, id: string): string => `${kind}:${id}`
 export const defaultClient = (): SavedClient => ({
   version: 1, servers: [], selected: null,
-  pet: { enabled: false, locked: false, alwaysOnTop: true, position: null, skin: null, size: 112 }, appearance: defaultAppearance(), window: null,
+  pet: { enabled: false, locked: false, alwaysOnTop: true, position: null, skin: null, size: 112, mark: null }, appearance: defaultAppearance(), window: null,
 })

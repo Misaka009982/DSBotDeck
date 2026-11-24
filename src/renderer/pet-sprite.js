@@ -4,7 +4,7 @@ import { createElement as h, useEffect, useState } from 'react'
 import { BotMark } from '@dsbot/client/mark.js'
 import { spriteFrame } from '../shared/pet-sprite.ts'
 import './pet-sprite.css'
-export function PetSprite({ asset, pose = 'idle', size = 112, paused = false }) {
+export function PetSprite({ asset, mark = null, pose = 'idle', size = 112, paused = false }) {
   const [ready, setReady] = useState(null)
   const [tick, setTick] = useState(0)
   useEffect(() => {
@@ -25,7 +25,7 @@ export function PetSprite({ asset, pose = 'idle', size = 112, paused = false }) 
     sync(); reduced.addEventListener('change', sync); document.addEventListener('visibilitychange', sync)
     return () => { clearInterval(timer); reduced.removeEventListener('change', sync); document.removeEventListener('visibilitychange', sync) }
   }, [ready, pose, paused])
-  if (!asset || ready !== asset.url) return h(BotMark, { size: Math.min(size, 96) })
+  if (!asset || ready !== asset.url) return h(BotMark, { look: mark ?? undefined, size: Math.min(size, 96) })
   const frame = spriteFrame(pose, tick)
   return h('span', { className: 'deck-sprite', role: 'img', 'aria-label': asset.name, style: {
     width: `${size * 192 / 208}px`, height: `${size}px`, backgroundImage: `url("${asset.url}")`,

@@ -11,7 +11,7 @@ export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'd
 const REQUIRED = [
   'app/ui/src/main.js', 'app/ui/src/app.js', 'app/ui/src/team.js', 'app/ui/src/chat.js',
   'app/ui/src/primitives.js', 'ds-bot/package.json', 'ds-bot/src/client/api.js',
-  'ds-bot/src/client/mark.js', 'ds-bot/src/client/overlays.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js',
+  'ds-bot/src/client/mark.js', 'ds-bot/src/client/overlays.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', 'ds-bot/src/client/activity-row.js',
   ...SCOPED_UI_FILES,
   'ds-bot/src/shared/browser-endpoints.js', 'mobile/src/team/gated.ts',
   'mobile/src/team/notices.ts', 'link/src/index.ts', 'LICENSE', 'NOTICE',
@@ -34,8 +34,10 @@ export function bootstrapText(source) {
 
 export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   const main = path.join(sourceRoot, 'app/ui/src/main.js')
+  if (specifier === '@dsbot/characters') return path.join(sourceRoot, 'ds-bot/src/client/characters.js')
   if (specifier === '@dsbot/bootstrap') return BOOTSTRAP_ID
   if (specifier === '@dsbotdeck/tool-steps') return path.join(clientRoot, 'src/remote/tool-steps.js')
+  if (specifier === '@dsbotdeck/tool-model') return path.join(clientRoot, 'src/shared/tool-model.ts')
   if (specifier === '@dsbotdeck/tool-refresh') return path.join(clientRoot, 'src/shared/tool-refresh.ts')
   if (importer === BOOTSTRAP_ID && specifier.startsWith('.')) return path.resolve(path.dirname(main), specifier)
   if (specifier === './app.js' && slash(importer ?? '') === slash(main)) return path.join(clientRoot, 'src/remote/app.js')
@@ -87,7 +89,7 @@ export async function readUpstream(clientRoot, requested = process.env.DSBOT_SOU
   const manifest = JSON.parse(await readFile(path.join(root, 'ds-bot/package.json'), 'utf8'))
   if (manifest.name !== 'ds-bot') throw new Error('指定目录不是 DS-Bot 源码。')
   bootstrapText(await readFile(path.join(root, 'app/ui/src/main.js'), 'utf8'))
-  for (const name of ['app/ui/src/chat.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', ...SCOPED_UI_FILES]) paintSource(await readFile(path.join(root, name), 'utf8'), path.join(root, name), root)
+  for (const name of ['app/ui/src/chat.js', 'app/ui/src/team.js', 'ds-bot/src/client/activity-row.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', ...SCOPED_UI_FILES]) paintSource(await readFile(path.join(root, name), 'utf8'), path.join(root, name), root)
   return { root, version: manifest.version, commit: await currentCommit(root), referenceCommit: REFERENCE_COMMIT }
 }
 

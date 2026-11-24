@@ -1,7 +1,7 @@
 {
   "name": "dsbotdeck",
   "productName": "DSBotDeck",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "只管理远程 DS-Bot 的独立桌面客户端，复用上游界面和手机加密链路。",
   "author": "DSBotDeck contributors",
@@ -25,6 +25,7 @@
     "@noble/curves": "1.9.7",
     "@noble/hashes": "1.8.0",
     "deep-view": "0.1.2",
+    "jsqr": "1.4.0",
     "qrcode-generator": "2.0.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",

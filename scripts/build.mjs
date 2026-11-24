@@ -56,6 +56,7 @@ for (const [folder, pages] of [
     root: path.join(clientRoot, `src/${folder}`),
     base: './',
     plugins: [plugin()],
+    worker: { plugins: () => [plugin()] },
     resolve: { dedupe: [...UI_PACKAGES] },
     build: {
       outDir: path.join(dist, folder),
@@ -70,6 +71,7 @@ const aliases = {
   '@dsbot/link': path.join(upstream.root, 'link/src/index.ts'),
   '@dsbot/notices': path.join(upstream.root, 'mobile/src/team/notices.ts'),
   '@dsbot/gated': path.join(upstream.root, 'mobile/src/team/gated.ts'),
+  '@dsbot/characters': path.join(upstream.root, 'ds-bot/src/client/characters.js'),
   '@dsbot/browser-policy': path.join(upstream.root, 'ds-bot/src/shared/browser-endpoints.js'),
 }
 const result = await bundle({
@@ -95,6 +97,8 @@ for (const name of ['LICENSE', 'NOTICE']) {
   await copyFile(path.join(upstream.root, name), path.join(legal, name))
   await copyFile(path.join(upstream.root, name), path.join(dist, 'remote', name))
 }
+await mkdir(path.join(dist, 'licenses/jsQR'), { recursive: true })
+await copyFile(path.join(clientRoot, 'node_modules/jsqr/LICENSE'), path.join(dist, 'licenses/jsQR/LICENSE'))
 const assets = path.join(dist, 'assets')
 await mkdir(assets, { recursive: true })
 for (const name of ['icon.png', 'icon.ico', 'tray.png', 'tray.ico']) {
