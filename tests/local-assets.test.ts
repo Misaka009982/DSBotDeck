@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 只使用临时素材，不读取用户的 Codex 合集、身份库或真实图片。
 import { strict as assert } from 'node:assert'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -25,7 +25,8 @@ test('本机文件拒绝越界、URL、设备路径和超出预算', async () =>
   const root = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-assets-'))
   try {
     await writeFile(path.join(root, 'sprite.webp'), sheet())
-    assert.equal(await localFile(root, 'sprite.webp', 1024), path.join(root, 'sprite.webp'))
+    // Windows 临时目录可能使用 8.3 短路径；localFile 按契约返回规范化后的真实路径。
+    assert.equal(await localFile(root, 'sprite.webp', 1024), await realpath(path.join(root, 'sprite.webp')))
     for (const name of ['../other.webp', 'https://example/a.webp', 'C:/other.webp', 'sprite.webp:stream', '\\other\\a.webp']) await assert.rejects(localFile(root, name, 1024))
     await assert.rejects(localFile(root, 'sprite.webp', 8), /大小/)
     await writeFile(path.join(root, 'fake.webp'), 'not an image')
