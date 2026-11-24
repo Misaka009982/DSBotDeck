@@ -1,0 +1,12 @@
+/* 只改变外壳边界；聊天、详情、设置、主题及动效来自上游样式。 */
+:root{--dsb-buttons-w:138px}
+.deck-remote-frame{position:relative;display:flex;flex-direction:column;height:100vh;height:100dvh;min-width:0;min-height:0}
+.deck-remote-controls{display:contents;margin:0;padding:0;border:0;min-width:0}
+.deck-remote-frame>.dsb-main,.deck-remote-controls>.dsb-main{flex:1;min-height:0}
+.deck-cache-banner{display:flex;flex-wrap:wrap;gap:6px 12px;flex:none;z-index:12;padding:7px 150px 7px 12px;background:var(--bt-sidebar);border-bottom:1px solid var(--bt-line);color:var(--bt-ink-2);font-size:12px;line-height:18px}
+.deck-cache-banner span{color:var(--bt-ink-3)}
+.deck-remote-empty{margin:auto;padding:36px;color:var(--bt-ink-3);text-align:center}
+body[data-deck-cached] :is(.bt-panel,.bt-pane,.bt-overlay,.bt-dialog) :is(button,input,select,textarea,[role=button]){pointer-events:none;opacity:.65}
+body[data-deck-cached] *,body[data-deck-cached] *::before,body[data-deck-cached] *::after{animation-play-state:paused!important}
+body[data-deck-cached] .dsb-band{-webkit-app-region:no-drag}
+@media(max-width:700px){.deck-cache-banner{padding-right:12px;padding-top:52px}}

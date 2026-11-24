@@ -1,0 +1,115 @@
+name: Windows 客户端构建
+
+# 本目录作为独立 GitHub 仓库根目录；两个 checkout 保持本机的同级源码布局。
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'native/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'electron-builder.yml'
+      - 'LICENSE'
+      - 'NOTICE'
+      - 'licenses/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: '可选：DS-Bot 的提交 SHA、分支或标签；留空使用已核对提交'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dsbotdeck-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    name: 构建 Windows x64 客户端
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: DSBotDeck
+    env:
+      DSBOT_UPSTREAM_REF: 'd104d9ca18d69a35460f14e15dff4d553181433a'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: 检出独立客户端
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # 固定 v4 提交
+        with:
+          path: DSBotDeck
+          persist-credentials: false
+
+      - name: 只读检出上游源码
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # 固定 v4 提交
+        with:
+          repository: Fei2411/DS-Bot
+          ref: ${{ inputs.upstream_ref || env.DSBOT_UPSTREAM_REF }}
+          path: DS-Bot
+          persist-credentials: false
+
+      - name: 准备 Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # 固定 v4 提交
+        with:
+          node-version: '24.10.0'
+
+      # 当前没有锁文件；安装仅在 runner 执行，生成的解析记录不自动回写仓库。
+      - name: 安装客户端依赖
+        run: npm install
+
+      - name: 严格类型检查
+        run: npm run typecheck
+
+      - name: 执行回归
+        run: npm test
+
+      - name: 构建 Windows x64 NSIS 安装包
+        run: npm run dist
+
+      - name: 核对来源并生成匹配源码
+        run: |
+          $root = (Get-Location).Path
+          $package = Get-Content -LiteralPath package.json -Raw -Encoding utf8 | ConvertFrom-Json
+          $clientSha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw '无法读取客户端提交' }
+          $upstreamSha = git -C ../DS-Bot rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw '无法读取上游提交' }
+          $receipt = Get-Content -LiteralPath dist/upstream-sources.json -Raw -Encoding utf8 | ConvertFrom-Json
+          if ($receipt.commit -ne $upstreamSha) { throw '打包来源与上游提交不一致' }
+          $clientArchive = Join-Path $root "release/DSBotDeck-Source-$($package.version)-$clientSha.zip"
+          $upstreamArchive = Join-Path $root "release/DS-Bot-Source-$upstreamSha.zip"
+          git archive --format=zip --prefix=DSBotDeck/ --output=$clientArchive HEAD
+          if ($LASTEXITCODE -ne 0) { throw '客户端对应源码 ZIP 生成失败' }
+          git -C ../DS-Bot archive --format=zip --prefix=DS-Bot/ --output=$upstreamArchive HEAD
+          if ($LASTEXITCODE -ne 0) { throw '上游对应源码 ZIP 生成失败' }
+          $installer = Join-Path $root "release/DSBotDeck-Setup-$($package.version)-x64.exe"
+          foreach ($file in @($installer,$clientArchive,$upstreamArchive,"$root/dist/upstream-sources.json","$root/package-lock.json")) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "缺少构建产物：$file" }
+          }
+
+      - name: 上传安装包、对应源码与来源
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # 固定 v4 提交
+        with:
+          name: DSBotDeck-Windows-x64-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            DSBotDeck/release/DSBotDeck-Setup-*-x64.exe
+            DSBotDeck/release/*-Source-*.zip
+            DSBotDeck/dist/upstream-sources.json
+            DSBotDeck/package-lock.json
+            DSBotDeck/LICENSE
+            DSBotDeck/NOTICE
+            DSBotDeck/licenses/DS-Bot/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

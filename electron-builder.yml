@@ -1,0 +1,25 @@
+appId: io.dsbotdeck.desktop
+productName: DSBotDeck
+asar: true
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+  - LICENSE
+  - NOTICE
+extraResources:
+  - from: native
+    to: native
+win:
+  icon: dist/assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+artifactName: DSBotDeck-Setup-${version}-${arch}.${ext}

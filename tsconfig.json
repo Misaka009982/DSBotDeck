@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": false,
+    "paths": {
+      "@dsbot/link": ["../DS-Bot/link/src/index.ts"],
+      "@dsbot/notices": ["../DS-Bot/mobile/src/team/notices.ts"],
+      "@dsbot/gated": ["../DS-Bot/mobile/src/team/gated.ts"],
+      "@dsbot/browser-policy": ["../DS-Bot/ds-bot/src/shared/browser-endpoints.js"],
+      "@noble/*": ["./node_modules/@noble/*"],
+      "@lukeburns/clatterjs": ["./node_modules/@lukeburns/clatterjs"]
+    }
+  },
+  "include": ["src/main/**/*.ts", "src/shared/**/*.ts", "src/preload/**/*.ts", "tests/**/*.ts"]
+}

@@ -1,0 +1,31 @@
+DSBotDeck
+Copyright 2026 DSBotDeck contributors
+
+本项目使用 Apache License 2.0；完整条款见 LICENSE。
+
+上游 DS-Bot
+来源：https://github.com/Fei2411/DS-Bot
+Copyright 2026 Fei2411 and the DS Bot contributors
+许可证：Apache License 2.0
+接入参考提交：d104d9ca18d69a35460f14e15dff4d553181433a
+
+本项目在构建时只读引用上游 app/ui/src、ds-bot/src/client、
+link/src、mobile/src/team/notices.ts、mobile/src/team/gated.ts 和
+端点权限定义，不修改上游源码。
+src/remote/app.js 是对上游独立 UI 入口的客户端适配，增加服务器导航、
+缓存提示和远程连接绑定；原有聊天、详情、设置、主题与素材仍来自上游。
+入口适配与 scripts/paint-source.mjs 仅在构建内存中增加非视觉的成功呈现回调，
+不保存上游修改或 UI 副本。
+图标与宠物的 BotMark 使用 DS-Bot 自有素材，仅说明所连接的产品。
+本项目不是 DeepSeek 或 DS-Bot 上游的官方发行版。
+
+上游完整归属说明保留在 licenses/DS-Bot/NOTICE；构建产物同时携带
+DS-Bot 的 LICENSE 与 NOTICE，并以 upstream-sources.json 记录实际源码提交
+及参与构建文件的 SHA-256。
+
+DSH Remote、React、React DOM、qrcode-generator、react-markdown、remark-gfm、
+@noble/* 和 @lukeburns/clatterjs 等第三方归属见上游 NOTICE 和对应包许可。
+运行依赖保留自己的许可证文件。
+
+DshDeck 只作为服务器树和四色状态的交互参考。
+本项目不复制 DshDeck、CLI-Manager/pet-e 的 AGPL 代码或素材。

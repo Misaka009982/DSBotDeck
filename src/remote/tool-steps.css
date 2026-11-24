@@ -1,0 +1,14 @@
+/* 复用原任务步骤的样式与主题变量；未知结果使用中性色，不冒充成功。 */
+.deck-tool-steps{margin:7px 0;gap:5px}
+.deck-tool-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 9px;color:var(--bt-ink-2);font-size:11px;line-height:17px}
+.deck-tool-count{color:var(--bt-ink-3);white-space:nowrap;font-weight:400}
+.deck-tool-steps .bt-tread-step{align-items:flex-start;gap:8px;padding:6px 9px}
+.deck-tool-steps .bt-tread-step-name{flex:1;display:flex;flex-direction:column;gap:2px;overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere}
+.deck-tool-name{font-family:var(--bt-mono,ui-monospace,Consolas,monospace);font-size:11.5px;line-height:17px;color:var(--bt-ink-2)}
+.deck-tool-label{color:var(--bt-ink-3);font-size:11px;line-height:16px;font-weight:400}
+.deck-tool-outcome{flex:none;white-space:nowrap;font-size:10.5px;line-height:17px;color:var(--bt-ink-3);font-weight:400}
+.deck-tool-steps .bt-tread-step .bt-tread-step-dot{margin-top:6px;background:var(--bt-ink-3)}
+.deck-tool-steps .bt-tread-step[data-outcome=success] .bt-tread-step-dot{background:var(--bt-green)}
+.deck-tool-steps .bt-tread-step[data-outcome=failure] .bt-tread-step-dot{background:var(--bt-danger)}
+.deck-tool-steps .bt-tread-step[data-outcome=failure] .deck-tool-outcome{color:var(--bt-danger)}
+@media(max-width:480px){.deck-tool-heading{flex-wrap:wrap;gap:2px 10px}}
