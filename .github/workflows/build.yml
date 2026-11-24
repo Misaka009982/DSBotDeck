@@ -77,39 +77,21 @@ jobs:
       - name: 构建 Windows x64 NSIS 安装包
         run: npm run dist
 
-      - name: 核对来源并生成匹配源码
+      - name: 核对来源与安装包
         run: |
-          $root = (Get-Location).Path
           $package = Get-Content -LiteralPath package.json -Raw -Encoding utf8 | ConvertFrom-Json
-          $clientSha = git rev-parse HEAD
-          if ($LASTEXITCODE -ne 0) { throw '无法读取客户端提交' }
           $upstreamSha = git -C ../DS-Bot rev-parse HEAD
           if ($LASTEXITCODE -ne 0) { throw '无法读取上游提交' }
           $receipt = Get-Content -LiteralPath dist/upstream-sources.json -Raw -Encoding utf8 | ConvertFrom-Json
           if ($receipt.commit -ne $upstreamSha) { throw '打包来源与上游提交不一致' }
-          $clientArchive = Join-Path $root "release/DSBotDeck-Source-$($package.version)-$clientSha.zip"
-          $upstreamArchive = Join-Path $root "release/DS-Bot-Source-$upstreamSha.zip"
-          git archive --format=zip --prefix=DSBotDeck/ --output=$clientArchive HEAD
-          if ($LASTEXITCODE -ne 0) { throw '客户端对应源码 ZIP 生成失败' }
-          git -C ../DS-Bot archive --format=zip --prefix=DS-Bot/ --output=$upstreamArchive HEAD
-          if ($LASTEXITCODE -ne 0) { throw '上游对应源码 ZIP 生成失败' }
-          $installer = Join-Path $root "release/DSBotDeck-Setup-$($package.version)-x64.exe"
-          foreach ($file in @($installer,$clientArchive,$upstreamArchive,"$root/dist/upstream-sources.json","$root/package-lock.json")) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "缺少构建产物：$file" }
-          }
+          $installer = "release/DSBotDeck-Setup-$($package.version)-x64.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw "缺少安装包：$installer" }
 
-      - name: 上传安装包、对应源码与来源
+      - name: 仅上传 EXE 安装包
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # 固定 v4 提交
         with:
           name: DSBotDeck-Windows-x64-${{ github.run_number }}-${{ github.run_attempt }}
-          path: |
-            DSBotDeck/release/DSBotDeck-Setup-*-x64.exe
-            DSBotDeck/release/*-Source-*.zip
-            DSBotDeck/dist/upstream-sources.json
-            DSBotDeck/package-lock.json
-            DSBotDeck/LICENSE
-            DSBotDeck/NOTICE
-            DSBotDeck/licenses/DS-Bot/*
+          path: DSBotDeck/release/DSBotDeck-Setup-*-x64.exe
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
