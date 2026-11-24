@@ -12,10 +12,14 @@ interface WindowPort {
   on(event: string, listener: () => void): unknown
   removeListener(event: string, listener: () => void): unknown
 }
+export function minimumWindowSize(area: Bounds): { width: number; height: number } {
+  return { width: Math.min(480, Math.floor(area.width / 2)), height: Math.min(320, Math.floor(area.height / 2)) }
+}
 export function restoreWindowBounds(value: Bounds | null, area: Bounds): Bounds {
   const normal = value ?? { x: 0, y: 0, width: 1280, height: 900 }
-  const width = Math.min(Math.max(960, normal.width), area.width)
-  const height = Math.min(Math.max(620, normal.height), area.height)
+  const minimum = minimumWindowSize(area)
+  const width = Math.min(Math.max(minimum.width, normal.width), area.width)
+  const height = Math.min(Math.max(minimum.height, normal.height), area.height)
   return { x: Math.round(Math.max(area.x, Math.min(value?.x ?? area.x + (area.width - width) / 2, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(value?.y ?? area.y + (area.height - height) / 2, area.y + area.height - height))), width, height }
 }
 export class WindowStateTracker {

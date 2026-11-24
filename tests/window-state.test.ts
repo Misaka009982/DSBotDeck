@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert'
 import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 import type { Bounds, WindowState } from '../src/shared/domain.ts'
-import { restoreWindowBounds, WindowStateTracker } from '../src/main/window-state.ts'
+import { minimumWindowSize, restoreWindowBounds, WindowStateTracker } from '../src/main/window-state.ts'
 
 class FixtureWindow extends EventEmitter {
   rectangle: Bounds = { x: 100, y: 120, width: 1100, height: 720 }
@@ -79,6 +79,20 @@ test('贴靠保存当前矩形，不退回贴靠前的普通尺寸', async () =>
     await tracker.flush()
     assert.deepEqual(saved[0], { ...window.rectangle, maximized: false })
   } finally { tracker.dispose() }
+})
+test('半屏贴靠小于原960宽度时不扩张，缩放后的屏幕使用同一最小尺寸', () => {
+  for (const area of [
+    { x: 0, y: 0, width: 1366, height: 728 },
+    { x: -1536, y: 0, width: 1536, height: 824 },
+    { x: 0, y: 0, width: 854, height: 440 },
+  ]) {
+    const half = Math.floor(area.width / 2)
+    const right = { x: area.x + area.width - half, y: area.y, width: half, height: area.height }
+    assert.deepEqual(restoreWindowBounds(right, area), right)
+    assert.ok(minimumWindowSize(area).width <= half)
+    const corner = { ...right, y: area.y + area.height / 2, height: area.height / 2 }
+    assert.deepEqual(restoreWindowBounds(corner, area), corner)
+  }
 })
 test('恢复窗口保留负坐标屏幕，断开屏幕或缩小工作区后移回可见范围', () => {
   const left = { x: -1920, y: 0, width: 1920, height: 1040 }

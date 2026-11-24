@@ -10,6 +10,8 @@ import { DeckSettings } from './deck-settings.js'
 import { useDeckLocale } from './deck-locale.js'
 import { readPairingImage } from './pairing-image.js'
 import { rasterizeIcon } from './builtin-icon.js'
+import { backgroundCropRect, backgroundPlacement } from '../shared/background-crop.ts'
+import { useImageSize, useWindowSize } from './background-image.js'
 const api = window.dsbotDeck
 const COLOR_LABELS = { green: '运行', yellow: '待交互', red: '明确失败', blue: '完成待查看' }
 function storedCollapse() { try { return JSON.parse(localStorage.getItem('dsbotdeck.tree-collapsed') ?? '{}') } catch { return {} } }
@@ -102,6 +104,8 @@ export function App() {
   const [collapsed, setCollapsed] = useState(storedCollapse)
   const viewport = useRef(null)
   const tree = useRef(null)
+  const windowSize = useWindowSize()
+  const backgroundImage = useImageSize(assets?.background)
   useEffect(() => {
     let stopped = false
     const accept = next => { if (!stopped) setSnapshot(current => !current || next.revision >= current.revision ? next : current) }
@@ -150,8 +154,10 @@ export function App() {
   const servers = visibleServers(snapshot?.servers ?? [], search)
   const local = snapshot?.appearance
   const background = backgroundLevels(local?.opacity ?? 0.25)
+  const crop = local?.backgroundCrop && backgroundImage && !backgroundImage.error ? backgroundCropRect(backgroundImage, windowSize, local.backgroundCrop) : null
+  const placement = crop ? backgroundPlacement(windowSize, crop) : null
   return h('div', { className: 'deck-frame', 'data-rail': rail || undefined, 'data-local-background': Boolean(assets?.background) || undefined, style: {
-    '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.surface, '--deck-chat-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': local?.fit ?? 'cover',
+    '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.surface, '--deck-chat-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': placement ? `${placement.width}px ${placement.height}px` : local?.fit ?? 'cover', '--deck-wallpaper-position': placement ? `${placement.x}px ${placement.y}px` : 'center',
   } },
     h('aside', { className: 'deck-side' },
       h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), assets?.icon ? h('img', { className: 'deck-app-icon', src: assets.icon, alt: '' }) : h(BotMark, { size: 24 }), h('span', { className: 'deck-brand-name' }, 'DSBotDeck'),

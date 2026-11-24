@@ -2,7 +2,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { PICKER_SHAPES, CHARACTER_COLORS } from '@dsbot/characters'
-import { command, frozenRequest, localMark, pairingText, relayUrl, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
+import { backgroundCrop, command, frozenRequest, localMark, pairingText, relayUrl, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
 import { defaultAppearance, defaultClient } from '../src/shared/domain.ts'
 
 test('服务器保留字和无效目标被拒绝', () => {
@@ -59,6 +59,14 @@ test('本机内置外观复用上游全部形状与配色，拒绝未知标识�
   const next = savedClient({ ...client, pet: { ...client.pet, mark: { shape: 'kitty', color: 'aurora' } } })
   assert.deepEqual(next.pet.mark, { shape: 'kitty', color: 'aurora' })
   assert.deepEqual(next.servers, client.servers)
+})
+test('背景选区兼容旧外观并拒绝非数值和越界缩放', () => {
+  const client = defaultClient()
+  const { backgroundCrop: _crop, ...old } = client.appearance
+  assert.equal(savedClient({ ...client, appearance: old }).appearance.backgroundCrop, null)
+  const crop = { cx: 0.3, cy: 0.7, zoom: 2 }
+  assert.deepEqual(savedClient({ ...client, appearance: { ...old, backgroundCrop: crop } }).appearance.backgroundCrop, crop)
+  for (const value of [true, { ...crop, cx: NaN }, { ...crop, cy: 2 }, { ...crop, zoom: 0 }, { ...crop, zoom: 9 }, { ...crop, zoom: '2' }]) assert.throws(() => backgroundCrop(value), /选区/)
 })
 test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
   const client = defaultClient()

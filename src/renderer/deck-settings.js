@@ -7,6 +7,7 @@ import { MAIN_LOOK } from '@dsbot/client/characters.js'
 import { lookOf } from '@dsbot/client/mark.js'
 import { renderBuiltinIcon } from './builtin-icon.js'
 import { PetSprite } from './pet-sprite.js'
+import { BackgroundCropper } from './background-cropper.js'
 const api = window.dsbotDeck
 function RangeControl({ label, value, min, max, step = 1, unit = '', disabled, commit }) {
   const [draft, setDraft] = useState(value)
@@ -61,14 +62,15 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
           h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('icon') }, '选择本地图标'),
           h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.iconPath && !prefs.builtinIcon, onClick: () => reset('icon') }, '恢复默认图标')),
         h('details', { className: 'deck-builtin-picker' }, h('summary', null, 'DS-Bot 内置图标与颜色'), grid(iconLook, chooseIcon)),
-        h('p', { className: 'deck-hint' }, '用于 Deck Logo、窗口、运行中的任务栏和托盘。Windows 已固定的快捷方式可能保留旧图标；不会改写 EXE 或远程头像。')),
+        h('p', { className: 'deck-hint' }, '用于 Deck Logo、窗口、运行中的任务栏和托盘，并同步当前安装的开始菜单入口。Windows 已固定项可能需重新固定才能刷新。')),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '整个程序背景'),
         h('div', { className: 'deck-setting-actions' }, h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('background') }, '选择背景图片'), h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.backgroundPath, onClick: () => reset('background') }, '移除背景')),
         h('p', { className: 'deck-hint' }, '本机图片覆盖整个窗口，包括聊天区；不使用服务器背景，也不改写服务器主题。'),
         h(RangeControl, { label: '背景透明度', value: 1 - prefs.opacity, min: 0, max: 1, step: 0.05, unit: '%', disabled, commit: transparency => act(() => api.appearance({ opacity: 1 - transparency })) }),
         h('p', { className: 'deck-hint' }, `会话区域透明度：${Math.min(100, Math.round((1 - prefs.opacity) * 100) + 10)}%，固定比其他区域高 10 个百分点；文字和控件不变。`),
         h(RangeControl, { label: '背景模糊', value: prefs.blur, min: 0, max: 24, unit: 'px', disabled, commit: blur => act(() => api.appearance({ blur })) }),
-        h('label', { className: 'deck-field' }, '图片布局', h('select', { className: 'bt-input', value: prefs.fit, disabled, onChange: event => act(() => api.appearance({ fit: event.target.value })) }, h('option', { value: 'cover' }, '填满窗口'), h('option', { value: 'contain' }, '完整显示')))),
+        h('label', { className: 'deck-field' }, '图片布局', h('select', { className: 'bt-input', value: prefs.fit, disabled: disabled || Boolean(prefs.backgroundCrop), onChange: event => act(() => api.appearance({ fit: event.target.value })) }, h('option', { value: 'cover' }, '填满窗口'), h('option', { value: 'contain' }, '完整显示'))),
+        assets?.background ? h('details', { className: 'deck-background-picker', open: true }, h('summary', null, '选择背景位置'), h(BackgroundCropper, { source: assets.background, value: prefs.backgroundCrop, disabled, commit: backgroundCrop => act(() => api.appearance({ backgroundCrop })) })) : null),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '四色宠物'),
         h('div', { className: 'deck-setting-actions' }, check('显示宠物', 'enabled'), check('锁定主体穿透', 'locked'), check('置顶显示', 'alwaysOnTop')),
         h(RangeControl, { label: '宠物尺寸', value: pet.size, min: 72, max: 144, unit: 'px', disabled, commit: size => act(() => api.pet({ size })) }),

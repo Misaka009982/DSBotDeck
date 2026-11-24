@@ -26,11 +26,13 @@ export interface LocalMark { shape: string; color: string }
 export interface BuiltinIcon { look: LocalMark; png: string }
 export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null; skin: string | null; size: number; mark: LocalMark | null }
 export type UiLanguage = 'zh' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'es' | 'fr' | 'de' | 'system'
+export interface BackgroundCrop { cx: number; cy: number; zoom: number }
 export interface AppearanceSettings {
   language: UiLanguage
   iconPath: string | null
   builtinIcon: BuiltinIcon | null
   backgroundPath: string | null
+  backgroundCrop: BackgroundCrop | null
   petLibraryPath: string | null
   opacity: number
   blur: number
@@ -48,7 +50,7 @@ export interface LocalAssetsView {
   selected: PetSkinView | null
   warnings: string[]
 }
-export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
+export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, backgroundCrop: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
 export interface SavedClient {
   version: 1
   servers: SavedServer[]

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AppearanceSettings, Bounds, BuiltinIcon, ContentCommand, EntityKind, LocalMark, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
+import type { AppearanceSettings, BackgroundCrop, Bounds, BuiltinIcon, ContentCommand, EntityKind, LocalMark, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
 import { isColor, PICKER_SHAPES } from '@dsbot/characters'
 import { defaultAppearance } from './domain.ts'
 
@@ -143,6 +143,12 @@ export function savedBuiltinIcon(value: unknown): BuiltinIcon | null {
   if (!look) throw new DeckError('asset/invalid', '内置图标选择无效，请重新选择。')
   return { look, png: iconPng(entry?.png) }
 }
+export function backgroundCrop(value: unknown): BackgroundCrop | null {
+  if (value === undefined || value === null) return null
+  const item = record(value)
+  if (!item || !finite(item.cx) || !finite(item.cy) || !finite(item.zoom) || item.cx < 0 || item.cx > 1 || item.cy < 0 || item.cy > 1 || item.zoom < 1 || item.zoom > 8) throw new DeckError('asset/invalid', '背景选区位置或缩放无效，请重新选择。')
+  return { cx: item.cx, cy: item.cy, zoom: item.zoom }
+}
 export function savedAppearance(value: unknown): AppearanceSettings {
   const defaults = defaultAppearance()
   if (value === undefined) return defaults
@@ -152,7 +158,7 @@ export function savedAppearance(value: unknown): AppearanceSettings {
   if (language !== 'zh' && language !== 'zh-TW' && language !== 'en' && language !== 'ja' && language !== 'ko' && language !== 'es' && language !== 'fr' && language !== 'de' && language !== 'system') throw new DeckError('bot/invalid', '界面语言无效。')
   const opacity = entry.opacity ?? defaults.opacity; const blur = entry.blur ?? defaults.blur; const fit = entry.fit ?? defaults.fit
   if (!finite(opacity) || opacity < 0 || opacity > 1 || !finite(blur) || blur < 0 || blur > 24 || (fit !== 'cover' && fit !== 'contain')) throw new DeckError('bot/invalid', '背景透明度、模糊或布局无效。')
-  return { language, iconPath: localPath(entry.iconPath), builtinIcon: savedBuiltinIcon(entry.builtinIcon), backgroundPath: localPath(entry.backgroundPath), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
+  return { language, iconPath: localPath(entry.iconPath), builtinIcon: savedBuiltinIcon(entry.builtinIcon), backgroundPath: localPath(entry.backgroundPath), backgroundCrop: backgroundCrop(entry.backgroundCrop), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
 }
 export function savedClient(value: unknown): SavedClient {
   const item = record(value)

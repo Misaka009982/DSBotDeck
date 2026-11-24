@@ -77,11 +77,12 @@ test('本机外观和宠物配置经真实身份库保存，不改变配对身�
   await withClient(async (manager, peers) => {
     const before = manager.connection('server-a').settings()
     const requests = new Map([...peers].map(([id, peer]) => [id, peer.sent.length]))
-    await manager.setAppearance({ iconPath: 'C:/fixtures/deck.png', backgroundPath: 'C:/fixtures/background.webp', opacity: 0.6, language: 'zh-TW' })
+    await manager.setAppearance({ iconPath: 'C:/fixtures/deck.png', backgroundPath: 'C:/fixtures/background.webp', backgroundCrop: { cx: 0.3, cy: 0.7, zoom: 2 }, opacity: 0.6, language: 'zh-TW' })
     const icon = { look: { shape: 'whale', color: 'blue' }, png: Buffer.from('fictional-png').toString('base64') }
     await manager.setAppearance({ iconPath: null, builtinIcon: icon })
     await manager.setPet({ skin: 'fixture-pet', size: 128, locked: true, mark: { shape: 'kitty', color: 'aurora' } })
     const snapshot = manager.snapshot()
+    assert.deepEqual(snapshot.appearance.backgroundCrop, { cx: 0.3, cy: 0.7, zoom: 2 })
     assert.deepEqual(snapshot.appearance.builtinIcon, { look: icon.look })
     assert.equal(JSON.stringify(snapshot).includes(icon.png), false)
     assert.deepEqual(snapshot.pet.mark, { shape: 'kitty', color: 'aurora' })
