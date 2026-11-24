@@ -40,6 +40,13 @@ test('旧版本本机配置补默认外观但不重置宠物或身份', () => {
   assert.equal(loaded.pet.skin, null); assert.equal(loaded.pet.size, 112)
   assert.deepEqual(loaded.pet.position, { x: 20, y: 30 })
 })
+test('窗口旧矩形继续兼容，新配置保留最大化且无效坐标不传给系统', () => {
+  const client = defaultClient(); const rectangle = { x: -1800, y: 80, width: 1200, height: 800 }
+  assert.deepEqual(savedClient({ ...client, window: rectangle }).window, { ...rectangle, maximized: false })
+  assert.deepEqual(savedClient({ ...client, window: { ...rectangle, maximized: true } }).window, { ...rectangle, maximized: true })
+  assert.equal(savedClient({ ...client, window: { ...rectangle, maximized: 'true' } }).window?.maximized, false)
+  assert.equal(savedClient({ ...client, window: { ...rectangle, x: NaN } }).window, null)
+})
 test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
   const client = defaultClient()
   assert.throws(() => savedClient({ ...client, appearance: { ...client.appearance, iconPath: 'https://example/icon.png' } }))

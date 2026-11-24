@@ -13,11 +13,12 @@ export function ToolSteps({ entry }) {
   const tools = toolSummaries(entry)
   if (tools.length === 0) return null
   const turn = Number.isSafeInteger(entry.turn) && entry.turn >= 0 ? entry.turn : null
-  return h('section', { className: 'bt-tread-steps deck-tool-steps', role: 'group', 'aria-label': '工具步骤摘要' },
-    h('div', { className: 'deck-tool-heading', title: '只显示服务器公开的工具摘要，不包含完整调用参数和输出。' },
-      h('span', null, '工具步骤'),
-      h('span', { className: 'deck-tool-count' }, turn === null ? `${tools.length} 项` : `轮次 ${turn} · ${tools.length} 项`)),
-    tools.map((tool, index) => {
+  return h('details', { className: 'bt-tread-steps deck-tool-steps' },
+    h('summary', { className: 'deck-tool-heading', title: '展开或收起服务器公开的工具摘要。' },
+      h('span', { className: 'deck-tool-chevron', 'aria-hidden': true }, '›'),
+      h('span', null, `用了 ${tools.length} 个工具`),
+      turn === null ? null : h('span', { className: 'deck-tool-count' }, `轮次 ${turn}`)),
+    h('div', { className: 'deck-tool-list' }, tools.map((tool, index) => {
       const outcome = OUTCOMES[tool.outcome]
       return h('div', { key: `${tool.name ?? 'missing'}:${index}`, className: 'bt-tread-step', 'data-outcome': tool.outcome },
         h('span', { className: 'bt-tread-step-dot', 'aria-hidden': true }),
@@ -25,5 +26,5 @@ export function ToolSteps({ entry }) {
           h('code', { className: 'deck-tool-name' }, tool.name ?? '工具名未提供'),
           tool.label && tool.label !== tool.name ? h('span', { className: 'deck-tool-label' }, hostText(tool.label)) : null),
         h('span', { className: 'deck-tool-outcome', title: outcome.hint }, outcome.text))
-    }))
+    })))
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AppearanceSettings, Bounds, ContentCommand, EntityKind, Point, SavedClient, SavedServer, Selection } from './domain.ts'
+import type { AppearanceSettings, Bounds, ContentCommand, EntityKind, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
 import { defaultAppearance } from './domain.ts'
 
 export const MAX_SERVERS = 32
@@ -46,6 +46,10 @@ export function bounds(value: unknown): Bounds | null {
   const origin = point(value)
   return origin && item && finite(item.width) && finite(item.height) && item.width >= 100 && item.width <= 16000 && item.height >= 100 && item.height <= 16000
     ? { ...origin, width: Math.round(item.width), height: Math.round(item.height) } : null
+}
+export function windowState(value: unknown): WindowState | null {
+  const rectangle = bounds(value)
+  return rectangle ? { ...rectangle, maximized: record(value)?.maximized === true } : null
 }
 export function relayUrl(value: unknown): string {
   if (typeof value !== 'string' || value.length > 2048) throw new DeckError('bot/invalid', '中转地址无效。')
@@ -148,7 +152,7 @@ export function savedClient(value: unknown): SavedClient {
     version: 1, servers,
     selected: chosen && servers.some(server => server.id === chosen.serverId) ? chosen : null,
     pet: { enabled: pet.enabled === true, locked: pet.locked === true, alwaysOnTop: pet.alwaysOnTop !== false, position: point(pet.position), skin: petSkin(pet.skin), size },
-    appearance: savedAppearance(item.appearance), window: bounds(item.window),
+    appearance: savedAppearance(item.appearance), window: windowState(item.window),
   }
 }
 export const kindOf = (value: unknown): EntityKind | null => value === 'bot' || value === 'room' ? value : null

@@ -7,6 +7,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | { [key:
 export type BotResult<T = unknown> = { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
 export interface Point { x: number; y: number }
 export interface Bounds extends Point { width: number; height: number }
+export interface WindowState extends Bounds { maximized: boolean }
 export interface Identity { deviceId: string; publicKey: string; privateKey: string; accessToken: string }
 export interface SavedServer {
   id: string
@@ -49,7 +50,7 @@ export interface SavedClient {
   selected: Selection | null
   pet: PetSettings
   appearance: AppearanceSettings
-  window: Bounds | null
+  window: WindowState | null
 }
 export interface Counts { green: number; yellow: number; red: number; blue: number }
 export interface Avatar { shape?: string; image?: string }

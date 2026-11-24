@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // 只有主进程可以读取 Vault；对外快照严格排除身份、令牌和配对码。
 import { randomUUID } from 'node:crypto'
-import type { AppearanceSettings, Bounds, ContentCommand, PetSettings, SavedClient, SavedServer, Selection, Snapshot } from '../shared/domain.ts'
+import type { AppearanceSettings, ContentCommand, PetSettings, SavedClient, SavedServer, Selection, Snapshot, WindowState } from '../shared/domain.ts'
 import { emptyCounts } from '../shared/domain.ts'
 import { MAX_SERVERS, DeckError, command, record, selection, text, validServerId } from '../shared/validation.ts'
 import { makePeer, newIdentity, pairingOffer } from './link-factory.ts'
@@ -188,7 +188,7 @@ export class ServerManager {
     await this.vault.update(value => ({ ...value, appearance: { ...value.appearance, ...patch } }))
     this.changed()
   }
-  async saveWindow(window: Bounds): Promise<void> { await this.vault.update(value => ({ ...value, window })) }
+  async saveWindow(window: WindowState): Promise<void> { await this.vault.update(value => ({ ...value, window })) }
   async stop(): Promise<void> {
     this.closing = true; for (const timer of this.startups) clearTimeout(timer); this.startups.clear()
     await Promise.all([...this.connections.values()].map(connection => connection.disconnect()))

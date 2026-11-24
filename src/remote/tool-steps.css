@@ -1,7 +1,13 @@
 /* 复用原任务步骤的样式与主题变量；未知结果使用中性色，不冒充成功。 */
-.deck-tool-steps{margin:7px 0;gap:5px}
-.deck-tool-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 9px;color:var(--bt-ink-2);font-size:11px;line-height:17px}
-.deck-tool-count{color:var(--bt-ink-3);white-space:nowrap;font-weight:400}
+.bt-tread-steps.deck-tool-steps{display:block;margin:7px 0}
+.deck-tool-heading{display:flex;align-items:center;gap:8px;padding:3px 9px;color:var(--bt-ink-2);font-size:11px;line-height:17px;cursor:pointer;list-style:none;border-radius:5px}
+.deck-tool-heading::-webkit-details-marker{display:none}
+.deck-tool-heading:hover{background:var(--bt-hover)}
+.deck-tool-heading:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.deck-tool-chevron{flex:none;font-size:16px;line-height:17px}
+.deck-tool-steps[open]>.deck-tool-heading .deck-tool-chevron{transform:rotate(90deg)}
+.deck-tool-list{display:flex;flex-direction:column;gap:5px;margin-top:5px}
+.deck-tool-count{margin-left:auto;color:var(--bt-ink-3);white-space:nowrap;font-weight:400}
 .deck-tool-steps .bt-tread-step{align-items:flex-start;gap:8px;padding:6px 9px}
 .deck-tool-steps .bt-tread-step-name{flex:1;display:flex;flex-direction:column;gap:2px;overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere}
 .deck-tool-name{font-family:var(--bt-mono,ui-monospace,Consolas,monospace);font-size:11.5px;line-height:17px;color:var(--bt-ink-2)}

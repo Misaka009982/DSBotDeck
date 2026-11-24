@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { lstat, mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import type { AppearanceSettings, Bounds, BotResult, PetSettings } from '../shared/domain.ts'
+import type { AppearanceSettings, BotResult, PetSettings } from '../shared/domain.ts'
 import { DeckError, errorCode, finite, localPath, petSkin, record, safeMessage, savedAppearance } from '../shared/validation.ts'
 import { ContentViews } from './content-views.ts'
 import { LocalAssets, readImage } from './local-assets.ts'
@@ -16,6 +16,7 @@ import { SCHEME, staticResponse } from './protocol.ts'
 import { RequestGate } from './request-gate.ts'
 import { ServerManager } from './server-manager.ts'
 import { Vault } from './vault.ts'
+import { restoreWindowBounds, WindowStateTracker } from './window-state.ts'
 
 protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 app.setName('DSBotDeck')
@@ -25,13 +26,6 @@ const single = app.requestSingleInstanceLock()
 if (!single || process.platform !== 'win32') app.quit()
 else void app.whenReady().then(start).catch(() => { app.quit() })
 
-function restore(value: Bounds | null): Bounds {
-  const normal = value ?? { x: 0, y: 0, width: 1280, height: 900 }
-  const area = screen.getDisplayMatching(normal).workArea
-  const width = Math.min(Math.max(960, normal.width), area.width)
-  const height = Math.min(Math.max(620, normal.height), area.height)
-  return { x: Math.round(Math.max(area.x, Math.min(value?.x ?? area.x + (area.width - width) / 2, area.x + area.width - width))), y: Math.round(Math.max(area.y, Math.min(value?.y ?? area.y + (area.height - height) / 2, area.y + area.height - height))), width, height }
-}
 function petPatch(value: unknown): Partial<Omit<PetSettings, 'position'>> {
   const input = record(value)
   if (!input || Object.keys(input).some(key => !['enabled', 'locked', 'alwaysOnTop', 'skin', 'size'].includes(key))) throw new DeckError('bot/invalid', '宠物设置无效。')
@@ -65,18 +59,17 @@ async function start(): Promise<void> {
   let tray: Tray | null = null
   let quitting = false
   let stopped = false
-  let saveTimer: ReturnType<typeof setTimeout> | undefined
+  let windowState: WindowStateTracker | null = null
   let localQueue: Promise<unknown> = Promise.resolve()
   let iconSignature = ''
   const localAction = (action: () => Promise<unknown>): Promise<unknown> => { const next = localQueue.then(action); localQueue = next.catch(() => {}); return next }
   const helper = app.isPackaged ? path.join(process.resourcesPath, 'native/windows-hello.ps1') : path.join(app.getAppPath(), 'native/windows-hello.ps1')
   const gate = new RequestGate(new WindowsUnlock(helper, () => window && !window.isDestroyed() ? window.getNativeWindowHandle() : null))
   const owns = (event: IpcMainInvokeEvent | IpcMainEvent): boolean => !quitting && window?.webContents === event.sender && event.senderFrame === event.sender.mainFrame && !event.sender.isDestroyed()
-  const saveWindow = async () => {
-    if (!window || window.isDestroyed() || window.isMinimized() || window.isFullScreen() || startupError) return
-    await manager.saveWindow(window.isMaximized() ? window.getNormalBounds() : window.getBounds())
+  const saveWindow = async () => { await windowState?.flush() }
+  const windowSaveFailed = (error: unknown) => {
+    if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('deck:view-error', safeMessage(error))
   }
-  const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => { void saveWindow().catch(() => {}) }, 500) }
   const show = () => {
     if (window === null || window.isDestroyed()) createWindow()
     if (!window) return
@@ -139,13 +132,16 @@ async function start(): Promise<void> {
     return null
   }
   function createWindow(): void {
+    const saved = vault.snapshot().window
+    const area = (saved ? screen.getDisplayMatching(saved) : screen.getPrimaryDisplay()).workArea
     const created = new BrowserWindow({
-      ...restore(vault.snapshot().window), minWidth: 960, minHeight: 620, show: false, title: 'DSBotDeck',
+      ...restoreWindowBounds(saved, area), minWidth: Math.min(960, area.width), minHeight: Math.min(620, area.height), show: false, title: 'DSBotDeck',
       icon: path.join(dist, 'assets/icon.ico'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#ffffff', symbolColor: '#333333', height: 48 },
       backgroundColor: '#ffffff',
       webPreferences: { preload: path.join(dist, 'preload/shell.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false },
     })
     window = created
+    windowState = new WindowStateTracker(created, async state => { if (!startupError) await manager.saveWindow(state) }, windowSaveFailed)
     created.setMenu(null)
     views = new ContentViews(created, manager, dist, gate, message => { if (!created.webContents.isDestroyed()) created.webContents.send('deck:view-error', message) }, () => assets.hasBackground())
     iconSignature = ''
@@ -153,11 +149,10 @@ async function start(): Promise<void> {
     created.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     created.webContents.on('will-navigate', (event, url) => { if (url !== `${SCHEME}://shell/index.html`) event.preventDefault() })
     created.webContents.on('will-attach-webview', event => event.preventDefault())
-    created.on('move', scheduleSave); created.on('resize', scheduleSave)
     created.on('show', () => views?.sync())
-    created.on('close', event => { if (!quitting) { event.preventDefault(); void saveWindow().catch(() => {}); created.hide() } })
-    created.on('closed', () => { views?.close(); views = null; window = null })
-    created.once('ready-to-show', () => { created.show(); views?.sync() })
+    created.on('close', event => { if (!quitting) { event.preventDefault(); void saveWindow().catch(windowSaveFailed); created.hide() } })
+    created.on('closed', () => { windowState?.dispose(); windowState = null; views?.close(); views = null; window = null })
+    created.once('ready-to-show', () => { if (saved?.maximized) created.maximize(); created.show(); views?.sync() })
     void created.loadURL(`${SCHEME}://shell/index.html`).catch(() => {})
   }
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -254,8 +249,9 @@ async function start(): Promise<void> {
     if (stopped) return
     event.preventDefault()
     if (quitting) return
-    quitting = true; clearTimeout(saveTimer)
-    void saveWindow().catch(() => {}).then(() => localQueue).then(() => manager.stop()).finally(() => { stopped = true; views?.close(); pet.close(); tray?.destroy(); tray = null; app.quit() })
+    quitting = true
+    const saving = saveWindow(); windowState?.dispose()
+    void saving.catch(windowSaveFailed).then(() => localQueue).then(() => manager.stop()).finally(() => { stopped = true; views?.close(); pet.close(); tray?.destroy(); tray = null; app.quit() })
   })
   createWindow(); manager.start(); pet.sync()
 }
