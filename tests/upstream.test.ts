@@ -4,6 +4,8 @@ import { strict as assert } from 'node:assert'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { adaptUiSource, BOOTSTRAP_ID, bootstrapText, inside } from '../scripts/upstream.mjs'
 import { paintSource, SCOPED_UI_FILES } from '../scripts/paint-source.mjs'
 
@@ -117,4 +119,28 @@ test('安装包依赖不带 DSH 与本地运行引擎', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const names = [...Object.keys(manifest.dependencies), ...Object.keys(manifest.devDependencies)]
   assert.equal(names.some(name => name.includes('@deepseek-ai/') || name === 'ds-bot' || /node-pty|python|libreoffice|playwright/.test(name)), false)
+})
+test('NodeNext ESM 从只读上游解析到客户端的真实加密类型', () => {
+  const configFile = fileURLToPath(new URL('../tsconfig.json', import.meta.url))
+  const loaded = ts.readConfigFile(configFile, ts.sys.readFile)
+  assert.equal(loaded.error, undefined)
+  const parsed = ts.parseJsonConfigFileContent(loaded.config, ts.sys, path.dirname(configFile), undefined, configFile)
+  assert.deepEqual(parsed.errors, [])
+  assert.equal(parsed.options.moduleResolution, ts.ModuleResolutionKind.NodeNext)
+  const imports = [
+    { file: 'link/src/keys.ts', name: '@noble/curves/ed25519', types: '@noble/curves/ed25519.d.ts' },
+    { file: 'link/src/keys.ts', name: '@noble/hashes/sha256', types: '@noble/hashes/sha256.d.ts' },
+    { file: 'link/src/keys.ts', name: '@noble/ciphers/webcrypto', types: '@noble/ciphers/webcrypto.d.ts' },
+    { file: 'link/src/noise.ts', name: '@lukeburns/clatterjs', types: '@lukeburns/clatterjs/dist/index.d.ts' },
+    { file: 'link/src/noise.ts', name: '@noble/ciphers/webcrypto', types: '@noble/ciphers/webcrypto.d.ts' },
+  ]
+  for (const entry of imports) {
+    const from = fileURLToPath(new URL(`../../DS-Bot/${entry.file}`, import.meta.url))
+    // 必须显式走 import 模式；require 模式会误放行旧的无扩展名路径和目录映射。
+    const resolved = ts.resolveModuleName(entry.name, from, parsed.options, ts.sys, undefined, undefined, ts.ModuleKind.ESNext).resolvedModule
+    assert.ok(resolved, `${entry.file} 的 ESM 导入 ${entry.name} 未能解析`)
+    const expected = fileURLToPath(new URL(`../node_modules/${entry.types}`, import.meta.url))
+    assert.equal(path.normalize(resolved.resolvedFileName), path.normalize(expected))
+  }
+  assert.equal(parsed.options.paths?.['@noble/*'], undefined, '不得改写 clatterjs 自身使用的嵌套 @noble 版本')
 })

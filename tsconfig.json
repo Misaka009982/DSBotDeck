@@ -17,8 +17,10 @@
       "@dsbot/notices": ["../DS-Bot/mobile/src/team/notices.ts"],
       "@dsbot/gated": ["../DS-Bot/mobile/src/team/gated.ts"],
       "@dsbot/browser-policy": ["../DS-Bot/ds-bot/src/shared/browser-endpoints.js"],
-      "@noble/*": ["./node_modules/@noble/*"],
-      "@lukeburns/clatterjs": ["./node_modules/@lukeburns/clatterjs"]
+      "@noble/curves/ed25519": ["./node_modules/@noble/curves/ed25519.d.ts"],
+      "@noble/hashes/sha256": ["./node_modules/@noble/hashes/sha256.d.ts"],
+      "@noble/ciphers/webcrypto": ["./node_modules/@noble/ciphers/webcrypto.d.ts"],
+      "@lukeburns/clatterjs": ["./node_modules/@lukeburns/clatterjs/dist/index.d.ts"]
     }
   },
   "include": ["src/main/**/*.ts", "src/shared/**/*.ts", "src/preload/**/*.ts", "tests/**/*.ts"]
