@@ -16,7 +16,7 @@ test('只更新本程序的开始菜单图标，不改变目标、参数或创�
     writeShortcutLink: (...args) => { writes.push(args); return true },
   }
   assert.equal(updateShortcutIcon('fixture.lnk', executable, icon, port), 'updated')
-  assert.deepEqual(writes, [['fixture.lnk', 'update', { icon, iconIndex: 0 }]])
+  assert.deepEqual(writes, [['fixture.lnk', 'update', { target: 'c:/apps/DSBotDeck/DSBotDeck.exe', icon, iconIndex: 0 }]])
   assert.equal(sameWindowsPath('DSBotDeck.exe', executable), false)
 })
 test('同名他程序、不同安装位置及已同步图标不被覆盖', () => {
