@@ -16,7 +16,28 @@ class BoundFixture implements RequestConnection {
   valid(token: ConnectionToken) { return token.generation === this.epoch && token.peer === this.peer }
   async call(endpoint: string, payload: unknown) { this.sent.push({ endpoint, payload }); return 'fixture-result' }
 }
-test('敏感端点每次验证，不缓存 Verified', async () => {
+test('默认门禁只按原配对权限发送，不依赖本机 Windows Hello', async () => {
+  const connection = new BoundFixture(); const gate = new RequestGate()
+  const payload = { provider: 'fixture-provider', value: 'fictional-key' }
+  await gate.execute(connection, 'provider-key', payload, { active: () => true })
+  assert.deepEqual(connection.sent, [{ endpoint: 'provider-key', payload }])
+  connection.mode = 'browser'
+  await assert.rejects(gate.execute(connection, 'provider-key', payload, { active: () => true }), /浏览器权限/)
+  connection.mode = 'phone'
+  await assert.rejects(gate.execute(connection, 'computer-takeover', {}, { active: () => true }), /不提供远程电脑控制/)
+  await assert.rejects(gate.execute(connection, 'phone-remove', {}, { active: () => true }), /必须在服务器本机/)
+  assert.equal(connection.sent.length, 1)
+})
+test('取消额外本机验证后，缓存、取消和失效界面仍不发送', async () => {
+  const connection = new BoundFixture(); const gate = new RequestGate()
+  await assert.rejects(gate.execute(connection, 'provider-key', {}, { active: () => false }), /切换或隐藏/)
+  const controller = new AbortController(); controller.abort()
+  await assert.rejects(gate.execute(connection, 'provider-key', {}, { active: () => true, signal: controller.signal }), /请求已取消/)
+  connection.valid = () => false
+  await assert.rejects(gate.execute(connection, 'provider-key', {}, { active: () => true }), /当前为缓存/)
+  assert.equal(connection.sent.length, 0)
+})
+test('显式启用的验证器每次验证，不缓存 Verified', async () => {
   const connection = new BoundFixture(); let verifications = 0
   const gate = new RequestGate({ verify: async () => { verifications += 1; return true } })
   await gate.execute(connection, 'provider-key', { value: 'fictional-a' }, { active: () => true })
@@ -86,6 +107,22 @@ test('聊天、Bot 设置与已有截图附件保留，敏感设置仍逐次验�
   await gate.execute(connection, 'computer-shot', { attachmentId: 'fictional-recorded-shot' }, { active: () => true })
   await gate.execute(connection, 'provider-key', { value: 'fictional-key' }, { active: () => true })
   assert.equal(verifications, 2); assert.equal(connection.sent.length, 6)
+})
+test('工具权限审批沿用允许一次或拒绝，失效界面和取消不发送', async () => {
+  for (const mode of ['phone', 'browser'] as const) {
+    const connection = new BoundFixture(); connection.mode = mode
+    const gate = new RequestGate({ verify: async () => { throw new Error('原工具审批不应改成其他权限模式') } })
+    assert.equal(endpointPolicy('approval-answer', mode), 'safe')
+    for (const choice of ['allow', 'reject']) await gate.execute(connection, 'approval-answer', { id: `approval-${choice}`, choice }, { active: () => true })
+    assert.deepEqual(connection.sent, [
+      { endpoint: 'approval-answer', payload: { id: 'approval-allow', choice: 'allow' } },
+      { endpoint: 'approval-answer', payload: { id: 'approval-reject', choice: 'reject' } },
+    ])
+    await assert.rejects(gate.execute(connection, 'approval-answer', { id: 'approval-old', choice: 'allow' }, { active: () => false }), /切换|隐藏/)
+    const controller = new AbortController(); controller.abort()
+    await assert.rejects(gate.execute(connection, 'approval-answer', { id: 'approval-aborted', choice: 'allow' }, { active: () => true, signal: controller.signal }), /取消/)
+    assert.equal(connection.sent.length, 2)
+  }
 })
 test('请求已取消不开始系统验证，也不发送', async () => {
   const connection = new BoundFixture(); const controller = new AbortController(); controller.abort()

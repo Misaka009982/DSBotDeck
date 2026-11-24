@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 const source = path.resolve(root, process.env.DSBOT_SOURCE || '../DS-Bot')
 const aliases = {
   '@dsbot/link': 'link/src/index.ts', '@dsbot/notices': 'mobile/src/team/notices.ts',
-  '@dsbot/characters': 'ds-bot/src/client/characters.js',
+  '@dsbot/characters': 'ds-bot/src/client/characters.js', '@dsbot/themes': 'ds-bot/src/client/themes.js',
   '@dsbot/gated': 'mobile/src/team/gated.ts', '@dsbot/browser-policy': 'ds-bot/src/shared/browser-endpoints.js',
 }
 registerHooks({

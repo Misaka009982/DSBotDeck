@@ -92,7 +92,8 @@ export class ContentViews {
   }
   private status(id: string): ContentStatus {
     const server = this.manager.connection(id).view()
-    return { cached: server.cached, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt, localBackground: this.localBackground(), uiLanguage: this.manager.appearanceSettings().language }
+    const appearance = this.manager.appearanceSettings()
+    return { cached: server.cached, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt, localBackground: this.localBackground(), uiLanguage: appearance.language, uiTheme: { theme: appearance.theme, themeMode: appearance.themeMode } }
   }
   sync(): void {
     if (this.window.isDestroyed()) return

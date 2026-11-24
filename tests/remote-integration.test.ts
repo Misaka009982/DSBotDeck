@@ -31,6 +31,7 @@ class FixtureCipher implements StringCipher {
 }
 class FixturePeer implements Peer {
   readonly sent: { endpoint: string; payload: unknown }[] = []
+  approvalError: string | null = null
   private readonly target: string
   constructor(target: string) { this.target = target }
   async connect(): Promise<void> {}
@@ -41,6 +42,7 @@ class FixturePeer implements Peer {
   onClose(_listener: () => void): () => void { return () => {} }
   async rpc<T = unknown>(_method: string, params: unknown): Promise<T> {
     const body = params as { endpoint: string; payload: unknown }; this.sent.push(body)
+    if (body.endpoint === 'approval-answer' && this.approvalError) return { ok: false, error: { code: this.approvalError, message: '此审批已失效。' } } as T
     const value = body.endpoint === 'hello' ? { api: 1, boot: `boot-${this.target}`, seq: 0 }
       : body.endpoint === 'state' ? { revision: 1, bots: [{ id: `${this.target}-bot`, name: this.target }], rooms: [] }
       : body.endpoint === 'notices' ? { boot: `boot-${this.target}`, seq: 0, notices: [] }
@@ -77,7 +79,7 @@ test('本机外观和宠物配置经真实身份库保存，不改变配对身�
   await withClient(async (manager, peers) => {
     const before = manager.connection('server-a').settings()
     const requests = new Map([...peers].map(([id, peer]) => [id, peer.sent.length]))
-    await manager.setAppearance({ iconPath: 'C:/fixtures/deck.png', backgroundPath: 'C:/fixtures/background.webp', backgroundCrop: { cx: 0.3, cy: 0.7, zoom: 2 }, opacity: 0.6, language: 'zh-TW' })
+    await manager.setAppearance({ theme: 'paper', themeMode: 'light', iconPath: 'C:/fixtures/deck.png', backgroundPath: 'C:/fixtures/background.webp', backgroundCrop: { cx: 0.3, cy: 0.7, zoom: 2 }, opacity: 0.6, language: 'zh-TW' })
     const icon = { look: { shape: 'whale', color: 'blue' }, png: Buffer.from('fictional-png').toString('base64') }
     await manager.setAppearance({ iconPath: null, builtinIcon: icon })
     await manager.setPet({ skin: 'fixture-pet', size: 128, locked: true, mark: { shape: 'kitty', color: 'aurora' } })
@@ -88,8 +90,30 @@ test('本机外观和宠物配置经真实身份库保存，不改变配对身�
     assert.deepEqual(snapshot.pet.mark, { shape: 'kitty', color: 'aurora' })
     assert.equal(snapshot.appearance.opacity, 0.6); assert.equal(snapshot.appearance.language, 'zh-TW'); assert.equal(snapshot.pet.skin, 'fixture-pet')
     assert.equal(snapshot.pet.size, 128); assert.equal(snapshot.pet.locked, true)
+    assert.equal(snapshot.appearance.theme, 'paper'); assert.equal(snapshot.appearance.themeMode, 'light')
+    await manager.select({ serverId: 'server-b', kind: 'bot', id: 'server-b-bot' })
+    assert.equal(manager.snapshot().appearance.theme, 'paper'); assert.equal(manager.snapshot().appearance.themeMode, 'light')
     assert.deepEqual(manager.connection('server-a').settings(), before)
     for (const [id, peer] of peers) assert.equal(peer.sent.length, requests.get(id))
+  })
+})
+test('默认无额外本机验证的真实链路仍绑定原服务器并拒绝导航 ABA', async () => {
+  await withClient(async (manager, peers) => {
+    let epoch = 1
+    manager.navigate('server-a', { action: 'settings', page: 'models' })
+    const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), gate: new RequestGate(), connection: () => manager.connection('server-a'), active: () => manager.activeServer() === 'server-a', instance: () => 'view-a', context: () => { const opening = epoch; return () => opening === epoch && manager.activeServer() === 'server-a' }, renderedTarget: () => null, read: () => {} })
+    const payload = { provider: 'fictional-provider', value: 'fictional-provider-value' }
+    const request = () => new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'provider-key', payload }) })
+    const response = await handler(request())
+    const result = await response.json() as { ok: boolean; value: { target: string } }
+    assert.equal(result.ok, true); assert.equal(result.value.target, 'server-a')
+    const pending = handler(request())
+    manager.navigate('server-b', { action: 'settings' }); epoch += 1
+    manager.navigate('server-a', { action: 'settings', page: 'models' }); epoch += 1
+    const changed = await (await pending).json() as { ok: boolean; error: { code: string } }
+    assert.equal(changed.ok, false); assert.equal(changed.error.code, 'bot/refused')
+    assert.deepEqual(peers.get('server-a')?.sent.filter(entry => entry.endpoint === 'provider-key'), [{ endpoint: 'provider-key', payload }])
+    assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'provider-key'), false)
   })
 })
 test('原 UI 的 JSON 请求通过真实适配和门禁，只发送到固定目标', async () => {
@@ -118,6 +142,46 @@ test('工具步骤通过真实只读 scheme 链路进入摘要，不请求电脑
     assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'chat'), false)
     for (const peer of peers.values()) assert.equal(peer.sent.some(entry => entry.endpoint.startsWith('computer-') || entry.endpoint.startsWith('browser-')), false)
     assert.equal(verifications, 0)
+  })
+})
+test('普通私聊审批通过真实门禁回传原编号与选择，只发送到原服务器', async () => {
+  await withClient(async (manager, peers) => {
+    manager.navigate('server-a', { action: 'chat', kind: 'bot', id: 'server-a-bot' })
+    const gate = new RequestGate({ verify: async () => { throw new Error('原审批不应增加其他授权流程') } })
+    const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), gate, connection: () => manager.connection('server-a'), active: () => manager.activeServer() === 'server-a', instance: () => 'view-a', context: () => () => manager.activeServer() === 'server-a', renderedTarget: () => ({ kind: 'bot', id: 'server-a-bot' }), read: () => {} })
+    for (const choice of ['allow', 'reject']) {
+      const payload = { id: `approval-${choice}`, choice }
+      const response = await handler(new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'approval-answer', payload }) }))
+      const result = await response.json() as { ok: boolean; value: { target: string; payload: unknown } }
+      assert.equal(result.ok, true); assert.equal(result.value.target, 'server-a'); assert.deepEqual(result.value.payload, payload)
+    }
+    assert.deepEqual(peers.get('server-a')?.sent.filter(entry => entry.endpoint === 'approval-answer'), [
+      { endpoint: 'approval-answer', payload: { id: 'approval-allow', choice: 'allow' } },
+      { endpoint: 'approval-answer', payload: { id: 'approval-reject', choice: 'reject' } },
+    ])
+    assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'approval-answer'), false)
+  })
+})
+test('过期审批不自动重发，切服或断线时不会发送旧授权', async () => {
+  await withClient(async (manager, peers) => {
+    const peer = peers.get('server-a'); assert.ok(peer)
+    peer.approvalError = 'bot/stale'
+    manager.navigate('server-a', { action: 'chat', kind: 'bot', id: 'server-a-bot' })
+    const gate = new RequestGate({ verify: async () => { throw new Error('不应额外系统验证') } })
+    const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), gate, connection: () => manager.connection('server-a'), active: () => manager.activeServer() === 'server-a', instance: () => 'view-a', context: () => () => manager.activeServer() === 'server-a', renderedTarget: () => ({ kind: 'bot', id: 'server-a-bot' }), read: () => {} })
+    const request = () => new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'approval-answer', payload: { id: 'approval-old', choice: 'allow' } }) })
+    const stale = await (await handler(request())).json() as { ok: boolean; error: { code: string } }
+    assert.equal(stale.ok, false); assert.equal(stale.error.code, 'bot/stale')
+    peer.approvalError = null
+    manager.navigate('server-b', { action: 'chat', kind: 'bot', id: 'server-b-bot' })
+    const switched = await (await handler(request())).json() as { ok: boolean; error: { code: string } }
+    assert.equal(switched.ok, false); assert.equal(switched.error.code, 'bot/refused')
+    await manager.disconnect('server-a')
+    manager.navigate('server-a', { action: 'chat', kind: 'bot', id: 'server-a-bot' })
+    const disconnected = await (await handler(request())).json() as { ok: boolean; error: { code: string } }
+    assert.equal(disconnected.ok, false); assert.equal(disconnected.error.code, 'bot/read-only')
+    assert.equal(peer.sent.filter(entry => entry.endpoint === 'approval-answer').length, 1)
+    assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'approval-answer'), false)
   })
 })
 test('原 UI 的接管请求在真实 scheme 门禁中直接拒绝，不验证或发送', async () => {

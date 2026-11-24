@@ -26,8 +26,10 @@ export interface LocalMark { shape: string; color: string }
 export interface BuiltinIcon { look: LocalMark; png: string }
 export interface PetSettings { enabled: boolean; locked: boolean; alwaysOnTop: boolean; position: Point | null; skin: string | null; size: number; mark: LocalMark | null }
 export type UiLanguage = 'zh' | 'zh-TW' | 'en' | 'ja' | 'ko' | 'es' | 'fr' | 'de' | 'system'
+export type ThemeMode = 'system' | 'light' | 'dark'
+export interface ThemeSettings { theme: string; themeMode: ThemeMode }
 export interface BackgroundCrop { cx: number; cy: number; zoom: number }
-export interface AppearanceSettings {
+export interface AppearanceSettings extends ThemeSettings {
   language: UiLanguage
   iconPath: string | null
   builtinIcon: BuiltinIcon | null
@@ -50,7 +52,7 @@ export interface LocalAssetsView {
   selected: PetSkinView | null
   warnings: string[]
 }
-export const defaultAppearance = (): AppearanceSettings => ({ language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, backgroundCrop: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
+export const defaultAppearance = (): AppearanceSettings => ({ theme: 'deepseek', themeMode: 'system', language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, backgroundCrop: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
 export interface SavedClient {
   version: 1
   servers: SavedServer[]
@@ -121,7 +123,7 @@ export interface Snapshot {
   startupError: string | null
 }
 export type ContentCommand = { action: 'chat'; kind: EntityKind; id: string } | { action: 'settings'; page?: string; id?: string } | { action: 'new-bot' | 'new-room' }
-export interface ContentStatus { cached: boolean; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null; localBackground?: boolean; uiLanguage?: UiLanguage }
+export interface ContentStatus { cached: boolean; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null; localBackground?: boolean; uiLanguage?: UiLanguage; uiTheme?: ThemeSettings }
 export const emptyCounts = (): Counts => ({ green: 0, yellow: 0, red: 0, blue: 0 })
 export const entityKey = (kind: EntityKind, id: string): string => `${kind}:${id}`
 export const defaultClient = (): SavedClient => ({

@@ -3,6 +3,8 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { CloseIcon } from '@dsbot/client/icons.js'
 import { CharacterGrid } from '@dsbot/client/bot-settings.js'
+import { ThemeGallery } from '@dsbot/client/settings.js'
+import { allThemes } from '@dsbot/themes'
 import { MAIN_LOOK } from '@dsbot/client/characters.js'
 import { lookOf } from '@dsbot/client/mark.js'
 import { renderBuiltinIcon } from './builtin-icon.js'
@@ -17,7 +19,7 @@ function RangeControl({ label, value, min, max, step = 1, unit = '', disabled, c
   return h('label', { className: 'deck-field' }, `${label}：${Math.round(draft * (unit === '%' ? 100 : 1))}${unit}`,
     h('input', { type: 'range', min, max, step, value: draft, disabled, onChange: event => setDraft(Number(event.target.value)), onPointerUp: save, onKeyUp: save, onBlur: save }))
 }
-export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
+export function DeckSettings({ snapshot, assets, dark, busy, error, run, close }) {
   const [search, setSearch] = useState('')
   const root = useRef(null)
   const exit = useRef(null)
@@ -36,7 +38,7 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
     return () => { window.removeEventListener('keydown', key); previous?.focus?.() }
   }, [])
   const disabled = busy || !snapshot || Boolean(snapshot.startupError)
-  const prefs = snapshot?.appearance ?? { opacity: 0.25, blur: 0, fit: 'cover' }
+  const prefs = snapshot?.appearance ?? { theme: 'deepseek', themeMode: 'system', opacity: 0.25, blur: 0, fit: 'cover' }
   const pet = snapshot?.pet ?? { enabled: false, locked: false, alwaysOnTop: true, skin: null, size: 112 }
   const act = callback => void run(callback)
   const iconLook = prefs.builtinIcon?.look ?? MAIN_LOOK
@@ -53,6 +55,11 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
     h('section', { ref: root, className: 'deck-sheet deck-settings', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'deck-settings-title' },
       h('header', null, h('h2', { id: 'deck-settings-title' }, 'Deck 设置'), h('button', { ref: exit, type: 'button', className: 'deck-icon', disabled: busy, title: '关闭 Deck 设置', 'aria-label': '关闭 Deck 设置', onClick: close }, h(CloseIcon))),
       h('p', { className: 'deck-hint' }, '仅保存到这台电脑。服务器设置在服务器行齿轮，Bot 参数在 Bot 行齿轮或聊天顶部名称中。'),
+      h('section', { className: 'deck-setting-block' }, h('h3', null, 'DS-Bot 原主题'),
+        h('fieldset', { className: 'deck-theme-picker', disabled }, h(ThemeGallery, { themes: allThemes(), current: prefs.theme, dark, onPick: theme => act(() => api.appearance({ theme })) })),
+        h('label', { className: 'deck-field' }, '明暗模式', h('select', { className: 'bt-input', value: prefs.themeMode, disabled, onChange: event => act(() => api.appearance({ themeMode: event.target.value })) },
+          [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => h('option', { key: value, value }, label)))),
+        h('p', { className: 'deck-hint' }, '原主题和配色统一用于主窗口、聊天与宠物；只有“跟随系统”自动切换明暗。设置保存在本机，不改变服务器主题；切换服务器也不会换主题。')),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '原 DS-Bot 界面语言'),
         h('label', { className: 'deck-field' }, '连接后聊天、Bot 参数与服务器设置使用的语言', h('select', { className: 'bt-input', value: prefs.language ?? 'zh', disabled, onChange: event => act(() => api.appearance({ language: event.target.value })) },
           [['zh', '简体中文'], ['zh-TW', '繁體中文'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['system', '跟随本机系统']].map(([value, label]) => h('option', { key: value, value }, label)))),
@@ -66,8 +73,8 @@ export function DeckSettings({ snapshot, assets, busy, error, run, close }) {
       h('section', { className: 'deck-setting-block' }, h('h3', null, '整个程序背景'),
         h('div', { className: 'deck-setting-actions' }, h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('background') }, '选择背景图片'), h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.backgroundPath, onClick: () => reset('background') }, '移除背景')),
         h('p', { className: 'deck-hint' }, '本机图片覆盖整个窗口，包括聊天区；不使用服务器背景，也不改写服务器主题。'),
-        h(RangeControl, { label: '背景透明度', value: 1 - prefs.opacity, min: 0, max: 1, step: 0.05, unit: '%', disabled, commit: transparency => act(() => api.appearance({ opacity: 1 - transparency })) }),
-        h('p', { className: 'deck-hint' }, `会话区域透明度：${Math.min(100, Math.round((1 - prefs.opacity) * 100) + 10)}%，固定比其他区域高 10 个百分点；文字和控件不变。`),
+        h(RangeControl, { label: '其他区域背景透明度', value: 1 - prefs.opacity, min: 0, max: 1, step: 0.05, unit: '%', disabled, commit: transparency => act(() => api.appearance({ opacity: 1 - transparency })) }),
+        h('p', { className: 'deck-hint' }, `会话区域透明度：${Math.max(0, Math.round((1 - prefs.opacity) * 100) - 10)}%，比其他区域低 10 个百分点（最低 0%）；文字和控件不变。`),
         h(RangeControl, { label: '背景模糊', value: prefs.blur, min: 0, max: 24, unit: 'px', disabled, commit: blur => act(() => api.appearance({ blur })) }),
         h('label', { className: 'deck-field' }, '图片布局', h('select', { className: 'bt-input', value: prefs.fit, disabled: disabled || Boolean(prefs.backgroundCrop), onChange: event => act(() => api.appearance({ fit: event.target.value })) }, h('option', { value: 'cover' }, '填满窗口'), h('option', { value: 'contain' }, '完整显示'))),
         assets?.background ? h('details', { className: 'deck-background-picker', open: true }, h('summary', null, '选择背景位置'), h(BackgroundCropper, { source: assets.background, value: prefs.backgroundCrop, disabled, commit: backgroundCrop => act(() => api.appearance({ backgroundCrop })) })) : null),

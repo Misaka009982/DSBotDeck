@@ -8,6 +8,7 @@ const SCOPE_EDITS = new Map([
   ['ds-bot/src/client/settings.js', [
     ["pages: [['computer', 'Computer use'], ['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]", "pages: [['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]"],
     ["tools: 'computer', guide: 'overview'", "tools: 'capabilities', guide: 'overview'"],
+    ['\nfunction ThemeGallery({ themes, current, dark, onPick }) {', '\nexport function ThemeGallery({ themes, current, dark, onPick }) {'],
   ]],
   ['ds-bot/src/client/bot-settings.js', [
     ['    h(BotComputerCard, { bot, roster, actions, run, Card, Row }),\n', ''],
@@ -18,6 +19,9 @@ const SCOPE_EDITS = new Map([
   ['ds-bot/src/client/settings-overview.js', [
     ["onOpen: () => actions.openSettings('computer'), value: capabilities.length", "onOpen: () => actions.openSettings('capabilities'), value: capabilities.length"],
     ["      roster.computer?.enabled ? h(Chip, null, t('Computer use')) : null,\n", ''],
+  ]],
+  ['ds-bot/src/client/member-status.js', [
+    ["    // Group and background-task approvals are answered directly through DS Bot;\n    // foreground own-chat approvals still use DSH's own inline card.\n    approval.answerable && (approval.roomId !== undefined || approval.taskId !== undefined)", "    // Deck 前台、群聊与后台均复用服务器审批接口，不依赖 DSH 本机卡。\n    approval.answerable === true"],
   ]],
 ])
 export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys()]
@@ -55,12 +59,19 @@ export function paintSource(source, id, root) {
   if (name === 'app/ui/src/chat.js') {
     source = replaceOnce(source, "call('chat', { botId,", "call('chat', { botId, steps: true,")
     source = replaceOnce(source, "call('room-chat', { roomId,", "call('room-chat', { roomId, steps: true,")
+    source = replaceOnce(source,
+      '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)',
+      '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)\n  const approvalKey = hooks.useWork(work => JSON.stringify(room === undefined ? foregroundApprovals(work, bot?.id, sessionId) : []))\n  const approvals = JSON.parse(approvalKey)')
+    source = replaceOnce(source, '[view.items, stream, pending, running, question]', '[view.items, stream, pending, running, question, approvalKey]')
+    source = replaceOnce(source,
+      "    h('div', { className: 'dsb-composer-root' },",
+      "    h('div', { className: 'dsb-composer-root' },\n      approvals.length ? h('div', { className: 'deck-chat-approvals', role: 'group', 'aria-label': t('Approval') }, approvals.map(approval => h(ApprovalCard, { key: approval.id, approval, bot, actions, showBot: true }))) : null,")
     const feed = '  useEffect(() => feed.on((event, data) => {\n'
     source = replaceOnce(source, feed, `  // 保留原读取上下文，工具变化只合并刷新可见且非缓存的聊天。\n  useEffect(() => {\n    const read = loadRef.current\n    const generation = gen.current\n    const available = () => gen.current === generation && loadRef.current === read && document.visibilityState === 'visible' && !document.body.hasAttribute('data-deck-cached')\n    const latest = () => { if (ready.current && available()) void read(undefined, undefined, true) }\n    const dispose = watchToolSteps(feed, { botId, roomId, sessionId: part }, latest, available)\n    document.addEventListener('visibilitychange', latest)\n    return () => { dispose(); document.removeEventListener('visibilitychange', latest) }\n  }, [feed, botId, roomId, part])\n\n${feed}`)
     const anchor = '  const onScroll = () => {\n'
     source = replaceOnce(source, anchor, `  // 本地远程壳只在成功布局最新一页后确认对应结果。\n  useLayoutEffect(() => {\n    if (!view.loading && !view.failed && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)\n  }, [view.items, view.loading, view.failed, view.sessionId])\n\n${anchor}`)
     source = replaceOnce(source, '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n', '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n    if (follow.current && !view.loading && !view.failed) team.deckPaint?.(bot?.id, room?.id, node)\n')
-    return "import { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
+    return "import { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, 'useMemo, useRef, useState', 'useMemo, useRef, useState, useLayoutEffect')

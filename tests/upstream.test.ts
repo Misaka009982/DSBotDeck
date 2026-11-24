@@ -11,15 +11,35 @@ import { paintSource, SCOPED_UI_FILES } from '../scripts/paint-source.mjs'
 
 const client = path.resolve('DSBotDeck')
 const source = path.resolve('DS-Bot')
-test('入口只在内存中去掉原 App 挂载', () => {
-  const original = "import { App } from './app.js'\ncreateRoot(document.getElementById('root')).render(h(App))\ninstallStyles(text)"
+const systemTheme = "const dark = matchMedia('(prefers-color-scheme: dark)')\nconst paint = () => { document.body.toggleAttribute('data-ds-dark-theme', dark.matches) }\npaint()\ndark.addEventListener('change', paint)"
+test('入口只在内存中去掉原 App 挂载与强制系统明暗监听', () => {
+  const original = `import { App } from './app.js'\n${systemTheme}\ncreateRoot(document.getElementById('root')).render(h(App))\ninstallStyles(text)`
   const next = bootstrapText(original)
   assert.ok(!next.includes('render(h(App))'))
+  assert.equal(next.includes('matchMedia('), false)
   assert.ok(next.includes('installStyles(text)'))
-  assert.ok(original.includes('render(h(App))'))
+  assert.ok(original.includes('render(h(App))')); assert.ok(original.includes(systemTheme))
 })
 test('上游入口变化时停止而不是猜测替换', () => {
   assert.throws(() => bootstrapText('mountAnotherApp()'), /入口已变化/)
+})
+test('真实入口的系统明暗适配兼容 CRLF，锚点变化或重复时停止', async () => {
+  const raw = await readFile(new URL('../../DS-Bot/app/ui/src/main.js', import.meta.url), 'utf8')
+  const next = bootstrapText(raw)
+  assert.equal(bootstrapText(raw.replace(/\r?\n/g, '\r\n')), next)
+  assert.equal(next.includes("dark.addEventListener('change', paint)"), false)
+  assert.throws(() => bootstrapText(raw.replace("const dark = matchMedia('(prefers-color-scheme: dark)')", 'changed system theme')), /系统明暗.*已变化/)
+  assert.throws(() => bootstrapText(`${raw}\n${systemTheme}`), /系统明暗.*已变化/)
+  assert.equal(await readFile(new URL('../../DS-Bot/app/ui/src/main.js', import.meta.url), 'utf8'), raw)
+})
+test('原主题预览组件只在构建内存中导出，不复制上游界面', async () => {
+  const raw = await readFile(new URL('../../DS-Bot/ds-bot/src/client/settings.js', import.meta.url), 'utf8')
+  const next = paintSource(raw, path.join(source, 'ds-bot/src/client/settings.js'), source)
+  assert.ok(next?.includes('export function ThemeGallery('))
+  assert.equal(raw.includes('export function ThemeGallery('), false)
+  assert.throws(() => paintSource(raw.replace('function ThemeGallery(', 'export function ThemeGallery('), path.join(source, 'ds-bot/src/client/settings.js'), source), /结构已变化/)
+  assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, 'ds-bot/src/client/settings.js'), source), next)
+  assert.equal(await readFile(new URL('../../DS-Bot/ds-bot/src/client/settings.js', import.meta.url), 'utf8'), raw)
 })
 test('UI 接入只替换入口与 primitives', () => {
   const main = path.join(source, 'app/ui/src/main.js')
@@ -27,6 +47,31 @@ test('UI 接入只替换入口与 primitives', () => {
   assert.equal(adaptUiSource('./chat.js', path.join(source, 'app/ui/src/app.js'), client, source), null)
   assert.equal(adaptUiSource('./dsh-primitives.js', path.join(source, 'ds-bot/src/client/cells.js'), client, source), path.join(source, 'app/ui/src/primitives.js'))
   assert.equal(adaptUiSource('@dsbot/bootstrap', undefined, client, source), BOOTSTRAP_ID)
+  assert.equal(adaptUiSource('@dsbot/themes', undefined, client, source), path.join(source, 'ds-bot/src/client/themes.js'))
+})
+test('普通私聊审批只读接入输入区，允许一次和拒绝仍使用原接口', async () => {
+  const names = ['app/ui/src/chat.js', 'ds-bot/src/client/member-status.js']
+  const adapted = new Map<string, string>()
+  for (const name of names) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const next = paintSource(raw, path.join(source, name), source)
+    assert.ok(next !== null)
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+    assert.throws(() => paintSource(`${raw}\n${raw}`, path.join(source, name), source), /结构已变化/)
+    adapted.set(name, next)
+  }
+  const chat = adapted.get(names[0]) ?? ''
+  assert.ok(chat.includes('foregroundApprovals(work, bot?.id, sessionId)'))
+  assert.ok(chat.includes('room === undefined'))
+  assert.ok(chat.includes('h(ApprovalCard, { key: approval.id, approval, bot, actions, showBot: true })'))
+  assert.ok(chat.includes('deck-chat-approvals')); assert.ok(chat.includes('[view.items, stream, pending, running, question, approvalKey]'))
+  const cards = adapted.get(names[1]) ?? ''
+  assert.ok(cards.includes('approval.answerable === true'))
+  assert.equal(cards.includes('approval.answerable && (approval.roomId !== undefined || approval.taskId !== undefined)'), false)
+  assert.ok(cards.includes("answer('allow')")); assert.ok(cards.includes("answer('reject')"))
+  assert.ok(cards.includes('disabled: busy')); assert.ok(cards.includes('actions.answerApproval(approval.id, choice)'))
+  assert.equal(adaptUiSource('@dsbotdeck/approval-model', undefined, client, source), path.join(client, 'src/shared/approval-model.ts'))
 })
 test('上游别名不能越过源码目录', () => {
   assert.throws(() => adaptUiSource('@dsbot/client/../../../outside.js', undefined, client, source), /越过/)

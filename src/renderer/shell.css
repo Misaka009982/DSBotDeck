@@ -7,9 +7,9 @@ button:disabled{cursor:default;opacity:.55}
 button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
 .deck-frame{position:relative;isolation:isolate;display:grid;grid-template-columns:280px minmax(0,1fr);height:100vh;height:100dvh;min-width:0;min-height:0;font-size:14px;background:var(--bt-main)}
 .deck-frame::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--deck-wallpaper,none) var(--deck-wallpaper-position,center)/var(--deck-wallpaper-fit,cover) no-repeat;opacity:var(--deck-wallpaper-opacity,.25);filter:blur(var(--deck-wallpaper-blur,0px))}
-.deck-frame[data-local-background] .deck-side{background:transparent}
+.deck-frame[data-local-background] .deck-side{position:relative;isolation:isolate;background:transparent}
+.deck-frame[data-local-background] .deck-side::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:var(--bt-main);opacity:var(--deck-surface-tint,0)}
 .deck-frame[data-local-background] .deck-content-slot{background:transparent}
-.deck-frame[data-local-background] .deck-content-slot::before{content:"";position:absolute;inset:0;pointer-events:none;background:var(--bt-main);opacity:var(--deck-chat-tint,0)}
 .deck-frame[data-local-background] .deck-content-slot>:is(.deck-welcome,.deck-view-error){position:relative}
 .deck-frame[data-rail]{grid-template-columns:56px minmax(0,1fr)}
 .deck-side{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bt-sidebar);border-right:1px solid var(--bt-line)}
@@ -95,6 +95,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .deck-settings select,.deck-settings input{font:inherit;color:var(--bt-ink);background:var(--bt-main)}
 .deck-builtin-picker{margin:10px 0}
 .deck-builtin-picker>summary{cursor:pointer;color:var(--bt-ink-2);font-size:12px;padding:5px 0}
+.deck-theme-picker{border:0;margin:0;padding:0;min-width:0}
 .deck-character-grid{border:0;margin:8px 0 0;padding:0;min-width:0;max-width:280px}
 .deck-character-grid:disabled{opacity:.65}
 .deck-background-picker{margin-top:12px}

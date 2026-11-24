@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AppearanceSettings, BackgroundCrop, Bounds, BuiltinIcon, ContentCommand, EntityKind, LocalMark, Point, SavedClient, SavedServer, Selection, WindowState } from './domain.ts'
 import { isColor, PICKER_SHAPES } from '@dsbot/characters'
+import { allThemes } from '@dsbot/themes'
 import { defaultAppearance } from './domain.ts'
 
 export const MAX_SERVERS = 32
@@ -154,11 +155,14 @@ export function savedAppearance(value: unknown): AppearanceSettings {
   if (value === undefined) return defaults
   const entry = record(value)
   if (!entry) throw new DeckError('bot/invalid', 'Deck 外观设置无效。')
+  const theme = entry.theme ?? defaults.theme; const themeMode = entry.themeMode ?? defaults.themeMode
+  if (typeof theme !== 'string' || !Object.hasOwn(allThemes(), theme)) throw new DeckError('bot/invalid', '请选择 DS-Bot 原主题。')
+  if (themeMode !== 'system' && themeMode !== 'light' && themeMode !== 'dark') throw new DeckError('bot/invalid', '主题明暗模式无效。')
   const language = entry.language ?? defaults.language
   if (language !== 'zh' && language !== 'zh-TW' && language !== 'en' && language !== 'ja' && language !== 'ko' && language !== 'es' && language !== 'fr' && language !== 'de' && language !== 'system') throw new DeckError('bot/invalid', '界面语言无效。')
   const opacity = entry.opacity ?? defaults.opacity; const blur = entry.blur ?? defaults.blur; const fit = entry.fit ?? defaults.fit
   if (!finite(opacity) || opacity < 0 || opacity > 1 || !finite(blur) || blur < 0 || blur > 24 || (fit !== 'cover' && fit !== 'contain')) throw new DeckError('bot/invalid', '背景透明度、模糊或布局无效。')
-  return { language, iconPath: localPath(entry.iconPath), builtinIcon: savedBuiltinIcon(entry.builtinIcon), backgroundPath: localPath(entry.backgroundPath), backgroundCrop: backgroundCrop(entry.backgroundCrop), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
+  return { theme, themeMode, language, iconPath: localPath(entry.iconPath), builtinIcon: savedBuiltinIcon(entry.builtinIcon), backgroundPath: localPath(entry.backgroundPath), backgroundCrop: backgroundCrop(entry.backgroundCrop), petLibraryPath: localPath(entry.petLibraryPath), opacity, blur, fit }
 }
 export function savedClient(value: unknown): SavedClient {
   const item = record(value)

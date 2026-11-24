@@ -3,11 +3,11 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { BotAvatar, BotMark } from '@dsbot/client/mark.js'
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon, DotsIcon, GearIcon, MonitorIcon, PeopleIcon, PlusIcon, SearchIcon, SidebarIcon, StarLineIcon } from '@dsbot/client/icons.js'
-import { allThemes, effectsOf, themeCss } from '@dsbot/client/themes.js'
 import { groupEntities, serverLabel, settingsCommand, visibleServers } from '../shared/navigation.ts'
 import { backgroundLevels } from '../shared/appearance.ts'
 import { DeckSettings } from './deck-settings.js'
 import { useDeckLocale } from './deck-locale.js'
+import { useDeckTheme } from './deck-theme.js'
 import { readPairingImage } from './pairing-image.js'
 import { rasterizeIcon } from './builtin-icon.js'
 import { backgroundCropRect, backgroundPlacement } from '../shared/background-crop.ts'
@@ -16,22 +16,6 @@ const api = window.dsbotDeck
 const COLOR_LABELS = { green: '运行', yellow: '待交互', red: '明确失败', blue: '完成待查看' }
 function storedCollapse() { try { return JSON.parse(localStorage.getItem('dsbotdeck.tree-collapsed') ?? '{}') } catch { return {} } }
 const button = (label, onClick, icon = null, props = {}) => h('button', { type: 'button', className: 'deck-icon', title: label, 'aria-label': label, onClick, ...props }, icon ? h(icon) : label)
-function useTheme(prefs) {
-  useEffect(() => {
-    const style = document.createElement('style')
-    style.textContent = themeCss(allThemes()[prefs?.theme] ?? allThemes().deepseek, prefs?.accent)
-    document.head.append(style)
-    document.body.dataset.btEffects = effectsOf(prefs)
-    if (prefs?.motion) document.body.dataset.btMotion = prefs.motion
-    const paint = () => {
-      const probe = document.createElement('span'); probe.style.cssText = 'position:fixed;visibility:hidden;background:var(--bt-main);color:var(--bt-ink)'; document.body.append(probe)
-      const read = value => { const parts = value.match(/\d+/g); return parts?.length >= 3 ? `#${parts.slice(0, 3).map(part => Number(part).toString(16).padStart(2, '0')).join('')}` : '#ffffff' }
-      const computed = getComputedStyle(probe); api.theme(read(computed.backgroundColor), read(computed.color)); probe.remove()
-    }
-    paint(); const dark = matchMedia('(prefers-color-scheme: dark)'); dark.addEventListener('change', paint)
-    return () => { dark.removeEventListener('change', paint); style.remove() }
-  }, [prefs?.theme, prefs?.accent, prefs?.motion, prefs?.effects])
-}
 function Sheet({ mode, server, busy, error, run, close }) {
   const [alias, setAlias] = useState(server?.alias ?? '')
   const [uri, setUri] = useState('')
@@ -133,7 +117,7 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('dsbotdeck.sidebar-rail', String(rail)) } catch {} }, [rail])
   useEffect(() => { try { localStorage.setItem('dsbotdeck.tree-collapsed', JSON.stringify(collapsed)) } catch {} }, [collapsed])
   const active = snapshot?.servers.find(server => server.id === snapshot.activeServerId)
-  useTheme(active?.team?.prefs)
+  const dark = useDeckTheme(snapshot?.appearance, active?.team?.prefs, api.theme)
   useDeckLocale(snapshot?.appearance.language ?? 'zh')
   const toggle = key => setCollapsed(value => ({ ...value, [key]: !value[key] }))
   const run = async (action, close = false) => {
@@ -157,7 +141,7 @@ export function App() {
   const crop = local?.backgroundCrop && backgroundImage && !backgroundImage.error ? backgroundCropRect(backgroundImage, windowSize, local.backgroundCrop) : null
   const placement = crop ? backgroundPlacement(windowSize, crop) : null
   return h('div', { className: 'deck-frame', 'data-rail': rail || undefined, 'data-local-background': Boolean(assets?.background) || undefined, style: {
-    '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.surface, '--deck-chat-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': placement ? `${placement.width}px ${placement.height}px` : local?.fit ?? 'cover', '--deck-wallpaper-position': placement ? `${placement.x}px ${placement.y}px` : 'center',
+    '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.chat, '--deck-surface-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': placement ? `${placement.width}px ${placement.height}px` : local?.fit ?? 'cover', '--deck-wallpaper-position': placement ? `${placement.x}px ${placement.y}px` : 'center',
   } },
     h('aside', { className: 'deck-side' },
       h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), assets?.icon ? h('img', { className: 'deck-app-icon', src: assets.icon, alt: '' }) : h(BotMark, { size: 24 }), h('span', { className: 'deck-brand-name' }, 'DSBotDeck'),
@@ -210,6 +194,6 @@ export function App() {
       viewError ? h('div', { className: 'deck-view-error', role: 'alert' }, h('p', null, viewError), h('button', { type: 'button', className: 'bt-soft', onClick: () => void run(() => api.reopen(active.id)) }, '重新打开界面')) : null),
     snapshot?.startupError ? h('div', { className: 'deck-error-banner', role: 'alert' }, snapshot.startupError) : null,
     error && !sheet ? h('div', { className: 'deck-toast', role: 'alert' }, error, button('关闭提示', () => setError(null), CloseIcon)) : null,
-    sheet?.mode === 'deck' ? h(DeckSettings, { snapshot, assets, busy, error, run, close: () => { if (!busy) setSheet(null) } })
+    sheet?.mode === 'deck' ? h(DeckSettings, { snapshot, assets, dark, busy, error, run, close: () => { if (!busy) setSheet(null) } })
       : sheet ? h(Sheet, { key: `${sheet.mode}:${sheet.server?.id ?? ''}`, ...sheet, busy, error, run, close: () => { if (!busy) setSheet(null) } }) : null)
 }

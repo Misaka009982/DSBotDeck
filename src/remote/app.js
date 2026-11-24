@@ -5,25 +5,14 @@ import { Component, createElement as h, Fragment, useEffect, useMemo, useRef, us
 import { ErrorToast } from '@dsbot/client/feedback.js'
 import { HeaderPill } from '@dsbot/client/header.js'
 import { Overlays } from '@dsbot/client/overlays.js'
-import { allThemes, effectsOf, themeCss } from '@dsbot/client/themes.js'
 import { currentPart } from '@dsbot/client/text.js'
 import { Chat } from '@dsbot/ui/chat.js'
 import { createTeam } from '@dsbot/ui/team.js'
 import { settingsCommand } from '../shared/navigation.ts'
 import { useDeckLocale } from '../renderer/deck-locale.js'
+import { useDeckTheme } from '../renderer/deck-theme.js'
 
 const bridge = window.dsbotContent
-function useTheme(prefs) {
-  useEffect(() => {
-    const style = document.createElement('style')
-    style.textContent = themeCss(allThemes()[prefs?.theme] ?? allThemes().deepseek, prefs?.accent)
-    document.head.append(style)
-    if (prefs?.motion) document.body.dataset.btMotion = prefs.motion
-    else delete document.body.dataset.btMotion
-    document.body.dataset.btEffects = effectsOf(prefs)
-    return () => { style.remove(); delete document.body.dataset.btEffects }
-  }, [prefs?.theme, prefs?.accent, prefs?.motion, prefs?.effects])
-}
 function useFrame(selector) {
   const [viewport, setViewport] = useState(window.innerWidth)
   useEffect(() => { const resize = () => setViewport(window.innerWidth); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize) }, [])
@@ -64,7 +53,7 @@ export function App() {
     const settings = settingsCommand(target)
     actions.openSettings(settings.page, settings.id)
   } }
-  useTheme(roster.prefs)
+  useDeckTheme(status.uiTheme, roster.prefs)
   useEffect(() => team.start(), [team])
   useEffect(() => {
     const offCommand = bridge.onCommand(setPacket)

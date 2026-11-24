@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // 宠物不接触远程身份或任意 RPC，只接收公开任务与发送本机交互。
 import { contextBridge, ipcRenderer } from 'electron'
-import type { LocalAssetsView, Point, Selection, Snapshot } from '../shared/domain.ts'
+import type { LocalAssetsView, Selection, Snapshot } from '../shared/domain.ts'
+import type { PetLayoutMessage, PetPointer } from '../shared/pet-layout.ts'
 const subscribe = <T>(channel: string, listener: (value: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, value: T) => listener(value)
   ipcRenderer.on(channel, handler)
@@ -10,7 +11,8 @@ const subscribe = <T>(channel: string, listener: (value: T) => void): (() => voi
 contextBridge.exposeInMainWorld('dsbotPet', {
   version: 1,
   onSnapshot: (listener: (value: Snapshot) => void) => subscribe('deck:pet-snapshot', listener),
-  onPointer: (listener: (value: Point) => void) => subscribe('deck:pet-pointer', listener),
+  onPointer: (listener: (value: PetPointer) => void) => subscribe('deck:pet-pointer', listener),
+  onLayout: (listener: (value: PetLayoutMessage) => void) => subscribe('deck:pet-layout', listener),
   onAssets: (listener: (value: LocalAssetsView | null) => void) => subscribe('deck:pet-assets', listener),
   ready: () => ipcRenderer.send('deck:pet-ready'),
   regions: (value: unknown) => ipcRenderer.send('deck:pet-regions', value),

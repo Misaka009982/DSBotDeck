@@ -30,4 +30,5 @@ DSH Remote、React、React DOM、qrcode-generator、react-markdown、remark-gfm�
 运行依赖保留自己的许可证文件。
 
 DshDeck 只作为服务器树和四色状态的交互参考。
-本项目不复制 DshDeck、CLI-Manager/pet-e 的 AGPL 代码或素材。
+CLI-Manager/pet-e 只作为宠物、右侧状态灯和任务面板的视觉布局参考，
+本项目在现有代码上独立实现，不复制其 AGPL 代码、运行器或素材。

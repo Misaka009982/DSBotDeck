@@ -10,7 +10,7 @@ export const BOOTSTRAP_ID = '\0dsbotdeck-bootstrap'
 export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'deep-view', 'react-markdown', 'remark-gfm'])
 const REQUIRED = [
   'app/ui/src/main.js', 'app/ui/src/app.js', 'app/ui/src/team.js', 'app/ui/src/chat.js',
-  'app/ui/src/primitives.js', 'ds-bot/package.json', 'ds-bot/src/client/api.js',
+  'app/ui/src/primitives.js', 'ds-bot/package.json', 'ds-bot/src/client/api.js', 'ds-bot/src/client/themes.js',
   'ds-bot/src/client/mark.js', 'ds-bot/src/client/overlays.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', 'ds-bot/src/client/activity-row.js',
   ...SCOPED_UI_FILES,
   'ds-bot/src/shared/browser-endpoints.js', 'mobile/src/team/gated.ts',
@@ -24,20 +24,25 @@ export function inside(root, target) {
 }
 
 export function bootstrapText(source) {
+  source = source.replaceAll('\r\n', '\n')
   const mount = "createRoot(document.getElementById('root')).render(h(App))"
   const appImport = "import { App } from './app.js'"
   if (!source.includes(mount) || !source.includes(appImport)) {
     throw new Error('上游 UI 启动入口已变化，请更新 DSBotDeck 的入口适配；未修改上游文件。')
   }
-  return source.replace(appImport, '').replace(mount, '')
+  const systemTheme = "const dark = matchMedia('(prefers-color-scheme: dark)')\nconst paint = () => { document.body.toggleAttribute('data-ds-dark-theme', dark.matches) }\npaint()\ndark.addEventListener('change', paint)"
+  if (source.split(systemTheme).length !== 2) throw new Error('上游 UI 系统明暗入口已变化，请更新只读主题适配；未修改上游文件。')
+  return source.replace(appImport, '').replace(mount, '').replace(systemTheme, '// 明暗由 Deck 本机设置统一控制，不保留上游强制跟随系统的监听。')
 }
 
 export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   const main = path.join(sourceRoot, 'app/ui/src/main.js')
   if (specifier === '@dsbot/characters') return path.join(sourceRoot, 'ds-bot/src/client/characters.js')
+  if (specifier === '@dsbot/themes') return path.join(sourceRoot, 'ds-bot/src/client/themes.js')
   if (specifier === '@dsbot/bootstrap') return BOOTSTRAP_ID
   if (specifier === '@dsbotdeck/tool-steps') return path.join(clientRoot, 'src/remote/tool-steps.js')
   if (specifier === '@dsbotdeck/tool-model') return path.join(clientRoot, 'src/shared/tool-model.ts')
+  if (specifier === '@dsbotdeck/approval-model') return path.join(clientRoot, 'src/shared/approval-model.ts')
   if (specifier === '@dsbotdeck/tool-refresh') return path.join(clientRoot, 'src/shared/tool-refresh.ts')
   if (importer === BOOTSTRAP_ID && specifier.startsWith('.')) return path.resolve(path.dirname(main), specifier)
   if (specifier === './app.js' && slash(importer ?? '') === slash(main)) return path.join(clientRoot, 'src/remote/app.js')

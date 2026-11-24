@@ -72,6 +72,7 @@ const aliases = {
   '@dsbot/notices': path.join(upstream.root, 'mobile/src/team/notices.ts'),
   '@dsbot/gated': path.join(upstream.root, 'mobile/src/team/gated.ts'),
   '@dsbot/characters': path.join(upstream.root, 'ds-bot/src/client/characters.js'),
+  '@dsbot/themes': path.join(upstream.root, 'ds-bot/src/client/themes.js'),
   '@dsbot/browser-policy': path.join(upstream.root, 'ds-bot/src/shared/browser-endpoints.js'),
 }
 const result = await bundle({

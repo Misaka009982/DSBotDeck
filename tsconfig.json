@@ -17,6 +17,7 @@
       "@dsbot/notices": ["../DS-Bot/mobile/src/team/notices.ts"],
       "@dsbot/gated": ["../DS-Bot/mobile/src/team/gated.ts"],
       "@dsbot/characters": ["../DS-Bot/ds-bot/src/client/characters.js"],
+      "@dsbot/themes": ["../DS-Bot/ds-bot/src/client/themes.js"],
       "@dsbot/browser-policy": ["../DS-Bot/ds-bot/src/shared/browser-endpoints.js"],
       "@noble/curves/ed25519": ["./node_modules/@noble/curves/ed25519.d.ts"],
       "@noble/hashes/sha256": ["./node_modules/@noble/hashes/sha256.d.ts"],

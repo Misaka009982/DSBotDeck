@@ -14,8 +14,9 @@ export interface RequestConnection {
 export interface RequestContext { active(): boolean; signal?: AbortSignal }
 export interface RequestReceipt { value: unknown; token: ConnectionToken }
 export class RequestGate {
-  private readonly unlock: UnlockProvider
-  constructor(unlock: UnlockProvider) { this.unlock = unlock }
+  // 标准 Deck 不装配额外本机验证器；配对权限和请求上下文仍逐次核对。
+  private readonly unlock: UnlockProvider | undefined
+  constructor(unlock?: UnlockProvider) { this.unlock = unlock }
   async execute(connection: RequestConnection, endpoint: unknown, payload: unknown, context: RequestContext): Promise<RequestReceipt> {
     const request = frozenRequest(endpoint, payload)
     const server = connection.view()
@@ -31,7 +32,7 @@ export class RequestGate {
       if ((!backgroundRead(request.endpoint) || policy === 'unlock') && !context.active()) throw new DeckError('bot/refused', '原服务器界面已切换或隐藏，操作未发送。')
     }
     check()
-    if (policy === 'unlock') {
+    if (policy === 'unlock' && this.unlock) {
       if (!context.active()) throw new DeckError('bot/refused', '请在活动服务器界面操作。')
       const verified = await this.unlock.verify({ serverAlias: server.alias, endpoint: request.endpoint, allowed: () => !context.signal?.aborted && context.active() && token !== null && connection.valid(token) })
       if (!verified) throw new DeckError('bot/refused', '系统验证已取消或不可用，未发送敏感操作。请先配置 Windows Hello。')

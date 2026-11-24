@@ -93,13 +93,13 @@ test('合集有坏包仍列出好包，只公开选中精灵且不读取任意�
     assert.equal(assets.response('pet', '/local/pet.webp', 'GET').status, 404)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
-test('会话背景透明度增加十个百分点，零到一百边界不影响文字层', () => {
-  const normal = backgroundLevels(0.6)
-  assert.equal(normal.surface, 0.6); assert.equal(normal.chat, 0.5)
-  assert.ok(Math.abs(normal.surface * (1 - normal.tint) - normal.chat) < 1e-10)
-  assert.deepEqual(backgroundLevels(0), { surface: 0, chat: 0, tint: 0 })
-  assert.equal(backgroundLevels(0.05).chat, 0)
-  assert.equal(backgroundLevels(1).chat, 0.9)
+test('其他区域背景比会话区多透明十个百分点，边界只作用于图片层', () => {
+  const normal = backgroundLevels(0.4)
+  assert.equal(normal.surface, 0.4); assert.equal(normal.chat, 0.5)
+  assert.ok(Math.abs(normal.chat * (1 - normal.tint) - normal.surface) < 1e-10)
+  assert.equal(backgroundLevels(0).chat, 0.1); assert.equal(backgroundLevels(0).tint, 1)
+  assert.equal(backgroundLevels(0.95).chat, 1)
+  assert.deepEqual(backgroundLevels(1), { surface: 1, chat: 1, tint: 0 })
   assert.equal(backgroundLevels(NaN).surface, 0)
 })
 test('宠物姿态只使用非缓存事实；不把缺失结果补成工作或失败', () => {

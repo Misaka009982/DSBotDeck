@@ -2,7 +2,8 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { PICKER_SHAPES, CHARACTER_COLORS } from '@dsbot/characters'
-import { backgroundCrop, command, frozenRequest, localMark, pairingText, relayUrl, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
+import { allThemes } from '@dsbot/themes'
+import { backgroundCrop, command, frozenRequest, localMark, pairingText, relayUrl, savedAppearance, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
 import { defaultAppearance, defaultClient } from '../src/shared/domain.ts'
 
 test('服务器保留字和无效目标被拒绝', () => {
@@ -67,6 +68,19 @@ test('背景选区兼容旧外观并拒绝非数值和越界缩放', () => {
   const crop = { cx: 0.3, cy: 0.7, zoom: 2 }
   assert.deepEqual(savedClient({ ...client, appearance: { ...old, backgroundCrop: crop } }).appearance.backgroundCrop, crop)
   for (const value of [true, { ...crop, cx: NaN }, { ...crop, cy: 2 }, { ...crop, zoom: 0 }, { ...crop, zoom: 9 }, { ...crop, zoom: '2' }]) assert.throws(() => backgroundCrop(value), /选区/)
+})
+test('本机主题兼容旧外观并只接受原主题目录和三种明暗模式', () => {
+  const client = defaultClient()
+  const { theme: _theme, themeMode: _mode, ...old } = client.appearance
+  const loaded = savedAppearance(old)
+  assert.equal(loaded.theme, 'deepseek'); assert.equal(loaded.themeMode, 'system')
+  for (const theme of Object.keys(allThemes())) for (const themeMode of ['system', 'light', 'dark']) {
+    const next = savedClient({ ...client, appearance: { ...old, theme, themeMode } })
+    assert.equal(next.appearance.theme, theme); assert.equal(next.appearance.themeMode, themeMode)
+    assert.deepEqual(next.servers, client.servers)
+  }
+  for (const theme of ['unknown', '__proto__', 'url(https://example/theme.css)', true, {}]) assert.throws(() => savedAppearance({ ...old, theme }), /主题/)
+  for (const themeMode of ['auto', 'server', true, 1]) assert.throws(() => savedAppearance({ ...old, themeMode }), /明暗/)
 })
 test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
   const client = defaultClient()

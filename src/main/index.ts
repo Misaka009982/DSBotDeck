@@ -10,7 +10,6 @@ import type { AppearanceSettings, BotResult, PetSettings } from '../shared/domai
 import { DeckError, errorCode, finite, iconPng, localMark, localPath, petSkin, record, safeMessage, savedAppearance, savedBuiltinIcon } from '../shared/validation.ts'
 import { ContentViews } from './content-views.ts'
 import { builtinIconBytes, LocalAssets, readImage } from './local-assets.ts'
-import { WindowsUnlock } from './native-unlock.ts'
 import { PetWindow } from './pet-window.ts'
 import { SCHEME, staticResponse } from './protocol.ts'
 import { RequestGate } from './request-gate.ts'
@@ -65,8 +64,8 @@ async function start(): Promise<void> {
   let localQueue: Promise<unknown> = Promise.resolve()
   let iconSignature = ''
   const localAction = (action: () => Promise<unknown>): Promise<unknown> => { const next = localQueue.then(action); localQueue = next.catch(() => {}); return next }
-  const helper = app.isPackaged ? path.join(process.resourcesPath, 'native/windows-hello.ps1') : path.join(app.getAppPath(), 'native/windows-hello.ps1')
-  const gate = new RequestGate(new WindowsUnlock(helper, () => window && !window.isDestroyed() ? window.getNativeWindowHandle() : null))
+  // 标准客户端按原配对与服务器权限执行，不额外要求 Windows Hello。
+  const gate = new RequestGate()
   const owns = (event: IpcMainInvokeEvent | IpcMainEvent): boolean => !quitting && window?.webContents === event.sender && event.senderFrame === event.sender.mainFrame && !event.sender.isDestroyed()
   const saveWindow = async () => { await windowState?.flush() }
   const windowSaveFailed = (error: unknown) => {
@@ -234,7 +233,7 @@ async function start(): Promise<void> {
         await refreshAssets()
       })
       case 'appearance': return localAction(async () => {
-        if (Object.keys(args).some(key => !['opacity', 'blur', 'fit', 'language', 'backgroundCrop'].includes(key))) throw new DeckError('bot/invalid', '图片与目录只能由本机选择器授权。')
+        if (Object.keys(args).some(key => !['opacity', 'blur', 'fit', 'language', 'backgroundCrop', 'theme', 'themeMode'].includes(key))) throw new DeckError('bot/invalid', '图片与目录只能由本机选择器授权。')
         const next = savedAppearance({ ...manager.appearanceSettings(), ...args })
         await manager.setAppearance(next)
       })

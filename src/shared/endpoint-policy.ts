@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// 手机原生门禁在主进程重用；未知宿主能力默认要求系统验证。
+// 复用上游敏感端点分类；标准 Deck 不额外要求设备验证，未知宿主端点仍由服务器最终授权。
 // 客户端不提供电脑控制或浏览器接管；computer-shot 仅保留上游已有附件读取及原门禁。
 import { BROWSER_ALLOWED } from '@dsbot/browser-policy'
 import { GATED } from '@dsbot/gated'

@@ -1,42 +1,55 @@
-/* BotMark 来自 DS-Bot；主体和状态标签是一块拖动／穿透区域。 */
-:root{--deck-green:#2ca56a;--deck-yellow:#d6a32a;--deck-red:#da4a53;--deck-blue:var(--bt-accent,#4d6bfe)}
-html,body,#root{width:380px;height:440px;margin:0;background:transparent!important;overflow:hidden}
+/* 独立宠物和右侧四色灯；仅小控件有底色，透明画布仍穿透桌面。 */
+:root{--deck-green:#2ca56a;--deck-yellow:#d6a32a;--deck-red:#da4a53;--deck-blue:var(--bt-accent,#4d6bfe);--deck-pet-surface:var(--bt-main,#182027)}
+html,body,#root{width:100%;height:100%;margin:0;background:transparent!important;overflow:hidden}
 body{font-size:12px;user-select:none}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:2px}
-.deck-pet{position:relative;width:380px;height:440px}
-.deck-pet-body{position:absolute;right:12px;bottom:10px;width:var(--deck-pet-width,104px);height:calc(var(--deck-pet-size,112px) + 27px);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:grab;touch-action:none}
+.deck-pet{position:relative;width:var(--deck-pet-canvas-width,380px);height:var(--deck-pet-canvas-height,440px)}
+.deck-pet-body{position:absolute;left:var(--deck-pet-body-x);top:var(--deck-pet-body-y);width:var(--deck-pet-width,104px);height:calc(var(--deck-pet-size,112px) + 27px);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;cursor:grab;touch-action:none}
 .deck-pet-body[data-locked]{cursor:default}
 .deck-pet-body:not([data-locked]):active{cursor:grabbing}
-.deck-pet-label{padding:3px 8px;border-radius:8px;background:transparent;color:var(--bt-ink-2);font-size:10px;white-space:nowrap;text-shadow:0 1px 3px var(--bt-main)}
-.deck-pet-mark{display:inline-flex}
+.deck-pet-label{max-width:100%;box-sizing:border-box;padding:2px 6px;border:1px solid var(--bt-line);border-radius:5px;background:var(--deck-pet-surface);color:var(--bt-ink-2);font-size:10px;line-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deck-pet-label[data-color]{border-color:currentColor}
+.deck-pet-mark{display:inline-flex;filter:drop-shadow(0 6px 7px rgba(0,0,0,.25))}
 .deck-pet[data-working] .deck-pet-mark{animation:deck-pet-work 2.4s ease-in-out infinite}
-.deck-pet-tools{position:absolute;right:10px;bottom:calc(var(--deck-pet-size,112px) + 43px);display:flex;gap:3px;padding:3px;border-radius:10px;visibility:hidden;pointer-events:none}
+.deck-pet-tools{position:absolute;left:var(--deck-pet-tools-x);top:var(--deck-pet-tools-y);display:flex;gap:4px;visibility:hidden;pointer-events:none}
 .deck-pet-tools[data-visible]{visibility:visible;pointer-events:auto}
-.deck-pet-tools,.deck-pet-lamps{background:transparent;border:0;box-shadow:none}
-.deck-pet-tools button{display:inline-grid;place-items:center;width:25px;height:23px;padding:0;border:0;border-radius:7px;background:none;font-size:10px}
-.deck-pet-tools button:hover{background:var(--bt-hover)}
+.deck-pet-tools button{display:inline-grid;place-items:center;box-sizing:border-box;width:26px;height:29px;padding:0;border:1px solid var(--bt-line);border-radius:6px;background:var(--deck-pet-surface);font-size:10px}
+.deck-pet-tools button:hover{border-color:currentColor}
 .deck-pet-tools svg{width:13px;height:13px}
-.deck-pet-lamps{position:absolute;right:calc(var(--deck-pet-width,104px) + 22px);bottom:18px;display:flex;flex-direction:column;gap:4px;padding:6px;border-radius:12px;text-shadow:0 1px 3px var(--bt-main)}
-.deck-pet-lamps button{display:flex;align-items:center;gap:6px;min-width:30px;height:17px;padding:0 3px;border:0;border-radius:5px;background:none;font-size:10px}
-.deck-pet-lamps button:hover{background:var(--bt-hover)}
-.deck-pet-dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%}
-.deck-pet-dot[data-color=green]{background:var(--deck-green)}
-.deck-pet-dot[data-color=yellow]{background:var(--deck-yellow)}
-.deck-pet-dot[data-color=red]{background:var(--deck-red)}
-.deck-pet-dot[data-color=blue]{background:var(--deck-blue)}
-.deck-pet-panel{position:absolute;right:10px;top:8px;width:350px;max-height:calc(350px - var(--deck-pet-size,112px));display:flex;flex-direction:column;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:16px;background:var(--bt-glass-bg,var(--bt-main));box-shadow:var(--bt-glass-shadow);overflow:hidden}
-.deck-pet-panel header{display:flex;align-items:center;gap:8px;padding:12px 13px;border-bottom:1px solid var(--bt-line)}
+.deck-pet-lamps{position:absolute;left:var(--deck-pet-lamps-x);top:var(--deck-pet-lamps-y);display:flex;flex-direction:column;gap:6px;width:max-content;max-width:56px}
+.deck-pet-lamps button{display:grid;grid-template-columns:9px minmax(0,1fr);align-items:center;gap:4px;box-sizing:border-box;min-width:44px;max-width:56px;height:30px;padding:4px;border:1px solid var(--bt-line);border-radius:6px;background:var(--deck-pet-surface);font-size:10px}
+.deck-pet-lamps button:hover,.deck-pet-lamps button[data-active]{border-color:currentColor}
+.deck-pet-lamp-count{min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+:is(.deck-pet-lamps button,.deck-pet-label,.deck-pet-list button)[data-color=green]{color:var(--deck-green)}
+:is(.deck-pet-lamps button,.deck-pet-label,.deck-pet-list button)[data-color=yellow]{color:var(--deck-yellow)}
+:is(.deck-pet-lamps button,.deck-pet-label,.deck-pet-list button)[data-color=red]{color:var(--deck-red)}
+:is(.deck-pet-lamps button,.deck-pet-label,.deck-pet-list button)[data-color=blue]{color:var(--deck-blue)}
+.deck-pet-dot{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%}
+.deck-pet-dot[data-color=green]{color:var(--deck-green);background:currentColor}
+.deck-pet-dot[data-color=yellow]{color:var(--deck-yellow);background:currentColor}
+.deck-pet-dot[data-color=red]{color:var(--deck-red);background:currentColor}
+.deck-pet-dot[data-color=blue]{color:var(--deck-blue);background:currentColor}
+.deck-pet-lamps .deck-pet-dot{box-shadow:0 0 7px currentColor}
+.deck-pet-lamps button[data-color=yellow][data-live] .deck-pet-dot{animation:deck-pet-attention 1.8s ease-in-out infinite}
+.deck-pet-panel{position:absolute;left:var(--deck-pet-panel-x);width:var(--deck-pet-panel-width);max-height:var(--deck-pet-panel-height);min-height:0;display:flex;flex-direction:column;box-sizing:border-box;border:1px solid var(--bt-line);border-radius:8px;background:var(--deck-pet-surface);box-shadow:0 8px 22px rgba(0,0,0,.22);overflow:hidden}
+.deck-pet[data-bubble-side=above] .deck-pet-panel,.deck-pet[data-bubble-side=above] .deck-pet-error{bottom:var(--deck-pet-panel-offset)}
+.deck-pet[data-bubble-side=below] .deck-pet-panel,.deck-pet[data-bubble-side=below] .deck-pet-error{top:var(--deck-pet-panel-offset)}
+.deck-pet-panel header{display:flex;flex:none;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--bt-line)}
 .deck-pet-panel header strong{font-size:12px;font-weight:600}
-.deck-pet-panel header>span:last-child{margin-left:auto;color:var(--bt-ink-3);font-size:10px}
-.deck-pet-list{min-height:0;overflow:auto;padding:4px 5px}
+.deck-pet-count{margin-left:auto;color:var(--bt-ink-3);font-size:10px}
+.deck-pet-collapse{display:inline-grid;place-items:center;flex:none;width:24px;height:24px;padding:0;border:0;border-radius:5px;background:none;color:var(--bt-ink-2);font-size:17px}
+.deck-pet-collapse:hover{background:var(--bt-hover)}
+.deck-pet-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:5px;overflow:auto;padding:6px}
 .deck-pet-list>p{padding:8px;color:var(--bt-ink-3)}
-.deck-pet-list button{width:100%;display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:8px;border:0;border-radius:9px;background:none;text-align:left}
+.deck-pet-list button{box-sizing:border-box;width:100%;display:flex;flex:none;align-items:center;flex-wrap:wrap;gap:4px 8px;min-height:48px;padding:8px;border:0;border-left:3px solid currentColor;border-radius:6px;background:color-mix(in srgb,var(--bt-ink) 5%,transparent);text-align:left}
 .deck-pet-list button:hover{background:var(--bt-hover)}
-.deck-pet-task-name{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:500}
+.deck-pet-task-name{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bt-ink);font-size:12px;font-weight:550}
 .deck-pet-task-server{margin-left:auto;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--bt-ink-3)}
-.deck-pet-task-detail{width:100%;color:var(--bt-ink-3);font-size:10px;line-height:1.5;overflow-wrap:anywhere}
-.deck-pet-panel footer{padding:8px 12px;border-top:1px solid var(--bt-line);color:var(--bt-ink-3);font-size:9px;line-height:1.6}
-.deck-pet-error{position:absolute;left:12px;right:10px;bottom:calc(var(--deck-pet-size,112px) + 85px);margin:0;color:var(--bt-danger);font-size:10px;line-height:1.5;padding:5px 8px;border-radius:8px;background:var(--bt-main)}
+.deck-pet-task-detail{width:100%;color:var(--bt-ink-2);font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.deck-pet-panel footer{flex:none;max-height:54px;overflow:auto;padding:8px 10px;border-top:1px solid var(--bt-line);color:var(--bt-ink-3);font-size:9px;line-height:1.6}
+.deck-pet-error{position:absolute;left:var(--deck-pet-panel-x);width:var(--deck-pet-panel-width);max-height:var(--deck-pet-panel-height);box-sizing:border-box;overflow:auto;margin:0;color:var(--bt-danger);font-size:10px;line-height:1.5;padding:7px 9px;border:1px solid var(--bt-line);border-radius:6px;background:var(--deck-pet-surface)}
 @keyframes deck-pet-work{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
-@media(prefers-reduced-motion:reduce){.deck-pet[data-working] .deck-pet-mark{animation:none}}
+@keyframes deck-pet-attention{0%,100%{box-shadow:0 0 4px currentColor}50%{box-shadow:0 0 10px currentColor}}
+@media(max-height:360px){.deck-pet-panel footer:not(:has([role=alert])){display:none}}
+@media(prefers-reduced-motion:reduce){.deck-pet[data-working] .deck-pet-mark,.deck-pet-lamps button[data-color=yellow] .deck-pet-dot{animation:none}}

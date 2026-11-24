@@ -12,4 +12,7 @@ body[data-deck-cached] .dsb-band{-webkit-app-region:no-drag}
 /* 仅透明化聊天底层，让父窗口的本机背景连续显示；远程页面拿不到本机图片路径。 */
 body[data-deck-background],body[data-deck-background] #root,body[data-deck-background] .dsb-main{background:transparent!important}
 body[data-deck-background] .dsb-head::before{background:none}
+/* 当前私聊审批固定在输入框上方，不混入历史消息；原卡片保留服务器公开请求说明与原按钮。 */
+.deck-chat-approvals{display:flex;flex-direction:column;gap:8px;flex:none;width:100%;max-width:min(992px,100%);max-height:min(280px,35dvh);overflow:auto;margin-bottom:8px}
+.deck-chat-approvals>.bt-mw-card{flex:none}
 @media(max-width:700px){.deck-cache-banner{padding-right:12px;padding-top:52px}}

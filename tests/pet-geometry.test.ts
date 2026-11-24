@@ -25,6 +25,15 @@ test('工具栏仅由主体悬停打开，移向按钮跨过间隙不消失，�
   assert.equal(petToolbarVisible(null, toolbar, { x: 320, y: 275 }, true), false)
   assert.equal(petRegion({ body, controls: [] }, { x: 320, y: 275 }), 'none')
 })
+test('工具栏在气泡下方布局中也只由主体悬停开启', () => {
+  const body = { x: 180, y: 45, width: 110, height: 139 }
+  const toolbar = { x: 230, y: 10, width: 56, height: 29 }
+  assert.equal(petToolbarVisible(body, toolbar, { x: 240, y: 20 }, false), false)
+  assert.equal(petToolbarVisible(body, toolbar, { x: 220, y: 80 }, false), true)
+  assert.equal(petToolbarVisible(body, toolbar, { x: 250, y: 42 }, true), true)
+  assert.equal(petToolbarVisible(body, toolbar, { x: 250, y: 20 }, true), true)
+  assert.equal(petToolbarVisible(body, toolbar, { x: 120, y: 80 }, true), false)
+})
 test('无效或超大命中区域拒绝接收', () => {
   assert.equal(petRegions({ body: null, controls: [{ x: -1, y: 0, width: 1, height: 1 }] }), null)
   assert.equal(petRegions({ body: null, controls: [{ x: 0, y: 0, width: 999999, height: 1 }] }), null)

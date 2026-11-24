@@ -1,7 +1,7 @@
 {
   "name": "dsbotdeck",
   "productName": "DSBotDeck",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "只管理远程 DS-Bot 的独立桌面客户端，复用上游界面和手机加密链路。",
   "author": "DSBotDeck contributors",
