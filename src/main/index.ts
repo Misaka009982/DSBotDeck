@@ -82,8 +82,15 @@ async function start(): Promise<void> {
       diagnostics.record({ ...entry, saved: entry.saved === undefined ? vault.windowState() : entry.saved, windowId: entry.windowId ?? (subject && !subject.isDestroyed() ? subject.id : undefined), geometry: subject ? windowGeometry(subject, rectangle => screen.getDisplayMatching(rectangle), rectangle => screen.dipToScreenRect(subject, rectangle)) : null, ready: windowReady, quitting })
     } catch { /* 原生观测不可用时，不影响窗口操作。 */ }
   }
-  const displayListeners = (['display-metrics-changed', 'display-added', 'display-removed'] as const).map(event => ({ event, listener: () => traceWindow({ event }) }))
-  for (const { event, listener } of displayListeners) screen.on(event, listener)
+  const displayListeners = {
+    metricsChanged: () => traceWindow({ event: 'display-metrics-changed' }),
+    added: () => traceWindow({ event: 'display-added' }),
+    removed: () => traceWindow({ event: 'display-removed' }),
+  }
+  // Electron按具体事件名声明重载，显式绑定保留SDK的类型检查。
+  screen.on('display-metrics-changed', displayListeners.metricsChanged)
+  screen.on('display-added', displayListeners.added)
+  screen.on('display-removed', displayListeners.removed)
   const saveWindow = async (reason: WindowSaveReason) => { await windowState?.flush(reason) }
   const windowSaveFailed = (error: unknown) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('deck:view-error', safeMessage(error))
@@ -182,7 +189,20 @@ async function start(): Promise<void> {
     const windowId = created.id
     const report = (entry: WindowDiagnosticRecord): void => traceWindow({ ...entry, windowId }, created)
     report({ event: 'window-created', saved, target: restoreWindowBounds(null, area), minimum })
-    for (const reason of ['move', 'resize', 'maximize', 'unmaximize', 'minimize', 'restore', 'enter-full-screen', 'leave-full-screen', 'show', 'hide', 'focus', 'blur', 'ready-to-show'] as const) created.on(reason, () => report({ event: 'window-event', reason }))
+    const recordEvent = (reason: WindowSaveReason) => () => report({ event: 'window-event', reason })
+    created.on('move', recordEvent('move'))
+    created.on('resize', recordEvent('resize'))
+    created.on('maximize', recordEvent('maximize'))
+    created.on('unmaximize', recordEvent('unmaximize'))
+    created.on('minimize', recordEvent('minimize'))
+    created.on('restore', recordEvent('restore'))
+    created.on('enter-full-screen', recordEvent('enter-full-screen'))
+    created.on('leave-full-screen', recordEvent('leave-full-screen'))
+    created.on('show', recordEvent('show'))
+    created.on('hide', recordEvent('hide'))
+    created.on('focus', recordEvent('focus'))
+    created.on('blur', recordEvent('blur'))
+    created.on('ready-to-show', recordEvent('ready-to-show'))
     report({ event: 'window-menu-before' })
     created.setMenu(null)
     report({ event: 'window-menu-after' })
@@ -347,7 +367,9 @@ async function start(): Promise<void> {
   app.on('will-quit', event => {
     if (diagnosticsStopped) return
     event.preventDefault(); stopWatching()
-    for (const { event, listener } of displayListeners) screen.removeListener(event, listener)
+    screen.removeListener('display-metrics-changed', displayListeners.metricsChanged)
+    screen.removeListener('display-added', displayListeners.added)
+    screen.removeListener('display-removed', displayListeners.removed)
     diagnostics.record({ event: 'session-stop', saved: vault.windowState() })
     void diagnostics.flush().finally(() => { diagnosticsStopped = true; app.quit() })
   })

@@ -136,7 +136,14 @@ test('窗口诊断覆盖恢复、标题栏、真实配置写入与最终退出�
   assert.ok(main.includes('screen.dipToScreenRect(subject, rectangle)'))
   assert.ok(main.includes('打开窗口诊断日志文件夹')); assert.ok(main.includes('shell.openPath(path.dirname(diagnostics.file))'))
   assert.ok(main.includes("app.on('will-quit'")); assert.ok(main.includes('diagnosticsStopped = true; app.quit()'))
-  assert.ok(main.includes('screen.removeListener(event, listener)'))
+  for (const [event, handler] of [['display-metrics-changed', 'metricsChanged'], ['display-added', 'added'], ['display-removed', 'removed']]) {
+    assert.ok(main.includes(`screen.on('${event}', displayListeners.${handler})`))
+    assert.ok(main.includes(`screen.removeListener('${event}', displayListeners.${handler})`))
+  }
+  for (const event of ['move', 'resize', 'maximize', 'unmaximize', 'minimize', 'restore', 'enter-full-screen', 'leave-full-screen', 'show', 'hide', 'focus', 'blur', 'ready-to-show']) assert.ok(main.includes(`created.on('${event}', recordEvent('${event}'))`))
+  assert.equal(main.includes('screen.on(event, listener)'), false)
+  assert.equal(main.includes('created.on(reason,'), false)
+  assert.equal(main.includes('screen.removeListener(event, listener)'), false)
   assert.ok(manager.includes("'window-state', reason")); assert.ok(manager.includes("'pet-position' : 'pet-settings'"))
   assert.ok(diagnostics.includes('watchFile(file, { persistent: false, interval: 1000 }, listener)'))
   assert.ok(diagnostics.includes('unwatchFile(file, listener)'))
