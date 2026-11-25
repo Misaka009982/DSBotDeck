@@ -4,7 +4,7 @@ DS-Bot 聊天与设置的独立桌面客户端，首版面向 Windows 10/11。
 
 只用于查看和管理远程服务器上的 DS-Bot，不提供远程电脑画面、键鼠控制或电脑/浏览器接管。权限按原配对身份与服务器授权决定，Deck 不额外强制 Windows Hello。
 
-> 本轮源码版本为 `0.1.5`，以已发布 `0.1.4`（`28c0b5e`）为基线，增加窗口恢复时序、未变布局去重、原五角星默认应用图标与重新应用入口。类型、回归和安装包结果须核对 `0.1.5` 对应的 Actions；旧安装包不会因源码变化立即更新。代理本机仅做静态核查，不安装依赖、构建、启动应用或运行测试；CI 也不能替代 Windows 实机效果验收。详细步骤见 [远程客户端验收](docs/verification/remote-client.md)。
+> 本轮源码版本为 `0.1.6`，在已发布 `0.1.5`（`288175f`）上增加窗口/配置变化诊断，用日志定位退出重开逐次变大的首次不一致；不再猜测尺寸补丁、不重置原配置。旧 `0.1.5` 不会生成新日志，类型、回归和安装包须核对 `0.1.6` 对应的 Actions。代理本机仅做静态核查，不安装依赖、构建、启动应用或运行测试；CI 也不能代替 Windows 实机诊断。步骤见 [远程客户端验收](docs/verification/remote-client.md)，取日志方法见 [窗口配置变化诊断](docs/verification/window-diagnostics.md)。
 
 ## 做了什么
 
@@ -123,7 +123,7 @@ npm run build
 - Windows runner 把客户端检出到 `DSBotDeck/`，官方 `Fei2411/DS-Bot` 只读检出到同级 `DS-Bot/`，只在客户端执行 `npm install`、`npm run typecheck`、`npm test`、`npm run dist`。不在上游安装依赖或启动 DSH。
 - 工作流只需要 `contents: read`，Actions 引用固定提交，两次检出均不持久化凭据。不发布 Release、不部署服务，也不自动提交 CI 生成的文件。
 
-成功后下载 `DSBotDeck-Windows-x64-<run_number>-<run_attempt>` Artifact，解压只有 `DSBotDeck-Setup-0.1.5-x64.exe`（Windows x64 NSIS 安装包）。GitHub 的 Artifact 下载会套一层 ZIP，但里面不再包含源码 ZIP、依赖解析记录或其它单独附件。
+成功后下载 `DSBotDeck-Windows-x64-<run_number>-<run_attempt>` Artifact，解压只有 `DSBotDeck-Setup-0.1.6-x64.exe`（Windows x64 NSIS 安装包）。GitHub 的 Artifact 下载会套一层 ZIP，但里面不再包含源码 ZIP、依赖解析记录或其它单独附件。
 
 构建内部仍核对 `dist/upstream-sources.json` 的提交与实际上游一致；完整 LICENSE/NOTICE、上游归属和来源记录继续随安装包保留。runner 生成的依赖解析记录不自动回写仓库，目前依赖尚未通过提交锁文件完全锁定。
 

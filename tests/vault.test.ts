@@ -8,6 +8,7 @@ import path from 'node:path'
 import { test } from 'node:test'
 import { Vault } from '../src/main/vault.ts'
 import type { StringCipher } from '../src/main/vault.ts'
+import type { WindowDiagnosticRecord } from '../src/main/window-diagnostics.ts'
 class FixtureCipher implements StringCipher {
   available = true
   private readonly key = randomBytes(32)
@@ -53,5 +54,41 @@ test('加密不可用不降级，损坏记录不覆写', async () => {
     await assert.rejects(broken.load(), /未重置/)
     await assert.rejects(broken.update(value => value), /覆盖/)
     assert.equal(await readFile(file, 'utf8'), 'fictional-corrupt-record')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+test('真实配置写入记录来源、窗口字段变化与替换前后文件元数据', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-vault-diagnostics-'))
+  try {
+    const file = path.join(directory, 'client.vault.json'); const reports: WindowDiagnosticRecord[] = []
+    const vault = new Vault(file, new FixtureCipher(), entry => { reports.push(entry) }); await vault.load()
+    const window = { x: 180, y: 100, width: 720, height: 540, maximized: false }
+    await vault.update(value => ({ ...value, window }), 'window-state', 'before-quit')
+    await vault.update(value => ({ ...value, pet: { ...value.pet, enabled: true } }), 'pet-settings')
+    const prepared = reports.filter(entry => entry.event === 'vault-update-prepared')
+    const written = reports.filter(entry => entry.event === 'vault-update-success')
+    assert.equal(prepared.length, 2); assert.equal(written.length, 2)
+    assert.equal(prepared[0].source, 'window-state'); assert.equal(prepared[0].reason, 'before-quit')
+    assert.equal(prepared[0].windowChanged, true); assert.equal(prepared[1].windowChanged, false)
+    assert.deepEqual(prepared[0].before, null); assert.deepEqual(prepared[0].after, window)
+    assert.deepEqual(prepared[1].before, window); assert.deepEqual(prepared[1].after, window)
+    assert.equal(written[0].file?.state, 'file'); assert.ok((written[0].file?.size ?? 0) > 0)
+    assert.equal(written[1].source, 'pet-settings'); assert.equal(written[1].operationId, 2)
+    assert.ok(reports.some(entry => entry.event === 'vault-update-start' && entry.operationId === 1 && entry.file?.state === 'missing'))
+    assert.equal(JSON.stringify(reports).includes('enabled'), false)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+test('配置诊断回调失败不阻止加密保存，失败记录不泄露异常正文', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-vault-diagnostics-'))
+  try {
+    const file = path.join(directory, 'client.vault.json'); const cipher = new FixtureCipher()
+    const vault = new Vault(file, cipher, () => { throw new Error('虚构敏感观测故障') }); await vault.load()
+    await vault.update(value => ({ ...value, window: { x: 100, y: 100, width: 720, height: 540, maximized: false } }), 'window-state', 'close')
+    const reports: WindowDiagnosticRecord[] = []; const loaded = new Vault(file, cipher, entry => { reports.push(entry) }); await loaded.load()
+    cipher.available = false
+    await assert.rejects(loaded.update(value => value, 'window-state'), /加密不可用/)
+    const failure = reports.find(entry => entry.event === 'vault-update-failed')
+    assert.equal(failure?.errorCode, 'vault/unavailable'); assert.equal(failure?.source, 'window-state')
+    assert.equal(JSON.stringify(reports).includes('虚构敏感'), false)
+    assert.ok((await readFile(file, 'utf8')).startsWith('{"format":"dsbotdeck-v1"'))
   } finally { await rm(directory, { recursive: true, force: true }) }
 })

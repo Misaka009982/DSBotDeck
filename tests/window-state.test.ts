@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events'
 import { test } from 'node:test'
 import type { Bounds, WindowState } from '../src/shared/domain.ts'
 import { minimumWindowSize, restoreWindowBounds, restoreWindowLayout, WindowStateTracker } from '../src/main/window-state.ts'
+import type { WindowDiagnosticRecord, WindowSaveReason } from '../src/main/window-diagnostics.ts'
 
 class FixtureWindow extends EventEmitter {
   rectangle: Bounds = { x: 100, y: 120, width: 1100, height: 720 }
@@ -171,5 +172,53 @@ test('排队写入后又回到原布局，不能因旧保存值相同而漏掉�
     const second = tracker.flush()
     release(); await Promise.all([first, second]); await tracker.flush()
     assert.deepEqual(saved, [changed, initial])
+  } finally { release(); tracker.dispose() }
+})
+test('恢复观测覆盖每个原生修改边界，诊断不会改变恢复顺序', () => {
+  const window = new FixtureWindow(); const reports: WindowDiagnosticRecord[] = []
+  const saved = { x: 180, y: 100, width: 720, height: 540, maximized: true }
+  restoreWindowLayout(window, saved, { x: 0, y: 0, width: 1920, height: 1040 }, entry => { reports.push(entry) })
+  assert.deepEqual(reports.map(entry => entry.event), ['restore-start', 'restore-minimum', 'restore-bounds', 'restore-maximize', 'restore-complete'])
+  assert.deepEqual(reports.find(entry => entry.event === 'restore-bounds')?.target, { x: 180, y: 100, width: 720, height: 540 })
+  assert.deepEqual(reports[0].minimum, { width: 480, height: 320 })
+  assert.deepEqual(window.restoration, ['minimum', 'bounds', 'maximize'])
+})
+test('记录resize与退出保存原因，明确区分队列写入和同布局跳过', async () => {
+  const window = new FixtureWindow(); const reports: WindowDiagnosticRecord[] = []; const reasons: WindowSaveReason[] = []
+  const initial = { ...window.rectangle, maximized: false }
+  const tracker = new WindowStateTracker(window, async (_state, reason) => { reasons.push(reason) }, undefined, initial, entry => { reports.push(entry) })
+  try {
+    window.rectangle = { ...window.rectangle, width: 1200 }; window.emit('resize')
+    await tracker.flush('before-quit'); await tracker.flush('close')
+    assert.deepEqual(reasons, ['before-quit'])
+    const written = reports.find(entry => entry.event === 'tracker-write-success')
+    assert.equal(written?.reason, 'before-quit'); assert.equal(written?.lastEvent, 'resize')
+    assert.deepEqual(written?.captured, { ...window.rectangle, maximized: false })
+    assert.ok(reports.some(entry => entry.event === 'tracker-write-skipped' && entry.reason === 'close'))
+  } finally { tracker.dispose() }
+})
+test('观测器抛错仍能保存窗口与释放事件监听', async () => {
+  const window = new FixtureWindow(); const saved: WindowState[] = []
+  const trace = () => { throw new Error('虚构观测故障') }
+  restoreWindowLayout(window, null, { x: 0, y: 0, width: 1920, height: 1040 }, trace)
+  const tracker = new WindowStateTracker(window, async state => { saved.push(state) }, undefined, null, trace)
+  try { await tracker.flush(); assert.equal(saved.length, 1) }
+  finally { tracker.dispose() }
+  assert.equal(window.listenerCount('resize'), 0)
+})
+test('排队后窗口继续变化，日志仍对应原请求的尺寸和触发事件', async () => {
+  const window = new FixtureWindow(); const reports: WindowDiagnosticRecord[] = []
+  let release!: () => void
+  const blocked = new Promise<void>(resolve => { release = resolve })
+  const tracker = new WindowStateTracker(window, async () => { await blocked }, undefined, null, entry => { reports.push(entry) })
+  try {
+    window.rectangle = { ...window.rectangle, width: 1200 }; window.emit('resize')
+    const first = tracker.flush('close')
+    window.rectangle = { ...window.rectangle, width: 1300 }; window.emit('move')
+    const second = tracker.flush('before-quit')
+    release(); await Promise.all([first, second])
+    const written = reports.filter(entry => entry.event === 'tracker-write-success')
+    assert.deepEqual(written.map(entry => [entry.reason, entry.lastEvent, entry.captured?.width]), [['close', 'resize', 1200], ['before-quit', 'move', 1300]])
+    assert.deepEqual(written.map(entry => entry.persisted?.width), [1200, 1300])
   } finally { release(); tracker.dispose() }
 })

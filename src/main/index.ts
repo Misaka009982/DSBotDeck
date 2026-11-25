@@ -18,6 +18,8 @@ import { Vault } from './vault.ts'
 import { syncStartMenuIcon } from './shortcut-icon.ts'
 import { icoFile } from './icon-format.ts'
 import { minimumWindowSize, restoreWindowBounds, restoreWindowLayout, WindowStateTracker } from './window-state.ts'
+import { windowGeometry, WindowDiagnostics } from './window-diagnostics.ts'
+import type { WindowDiagnosticRecord, WindowSaveReason } from './window-diagnostics.ts'
 
 protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 app.setName('DSBotDeck')
@@ -50,9 +52,13 @@ async function result(action: () => Promise<unknown>): Promise<BotResult> {
 }
 async function start(): Promise<void> {
   const dist = path.join(app.getAppPath(), 'dist')
-  const vault = new Vault(path.join(app.getPath('userData'), 'client.vault.json'), safeStorage)
+  const vaultFile = path.join(app.getPath('userData'), 'client.vault.json')
+  const diagnostics = new WindowDiagnostics(path.join(app.getPath('userData'), 'diagnostics/window-state.jsonl'), app.getVersion())
+  diagnostics.record({ event: 'session-start' })
+  const vault = new Vault(vaultFile, safeStorage, entry => diagnostics.record(entry))
   let startupError: string | null = null
   try { await vault.load() } catch (error) { startupError = safeMessage(error) }
+  const stopWatching = diagnostics.watchConfiguration(vaultFile)
   const manager = new ServerManager(vault, undefined, startupError)
   const assets = new LocalAssets(path.join(homedir(), '.codex', 'pets'))
   await assets.refresh(manager.appearanceSettings(), manager.petSettings().skin)
@@ -63,6 +69,7 @@ async function start(): Promise<void> {
   let tray: Tray | null = null
   let quitting = false
   let stopped = false
+  let diagnosticsStopped = false
   let windowState: WindowStateTracker | null = null
   let localQueue: Promise<unknown> = Promise.resolve()
   let iconSignature = ''
@@ -70,15 +77,24 @@ async function start(): Promise<void> {
   // 标准客户端按原配对与服务器权限执行，不额外要求 Windows Hello。
   const gate = new RequestGate()
   const owns = (event: IpcMainInvokeEvent | IpcMainEvent): boolean => !quitting && window?.webContents === event.sender && event.senderFrame === event.sender.mainFrame && !event.sender.isDestroyed()
-  const saveWindow = async () => { await windowState?.flush() }
+  const traceWindow = (entry: WindowDiagnosticRecord, subject: BrowserWindow | null = window): void => {
+    try {
+      diagnostics.record({ ...entry, saved: entry.saved === undefined ? vault.windowState() : entry.saved, windowId: entry.windowId ?? (subject && !subject.isDestroyed() ? subject.id : undefined), geometry: subject ? windowGeometry(subject, rectangle => screen.getDisplayMatching(rectangle), rectangle => screen.dipToScreenRect(subject, rectangle)) : null, ready: windowReady, quitting })
+    } catch { /* 原生观测不可用时，不影响窗口操作。 */ }
+  }
+  const displayListeners = (['display-metrics-changed', 'display-added', 'display-removed'] as const).map(event => ({ event, listener: () => traceWindow({ event }) }))
+  for (const { event, listener } of displayListeners) screen.on(event, listener)
+  const saveWindow = async (reason: WindowSaveReason) => { await windowState?.flush(reason) }
   const windowSaveFailed = (error: unknown) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('deck:view-error', safeMessage(error))
   }
   const show = () => {
+    traceWindow({ event: 'window-show-request' })
     if (window === null || window.isDestroyed()) createWindow()
     if (!window || !windowReady) return
     if (window.isMinimized()) window.restore()
     window.show(); window.focus(); views?.sync()
+    traceWindow({ event: 'window-show-complete' })
   }
   const openSettings = () => {
     show()
@@ -111,7 +127,11 @@ async function start(): Promise<void> {
       const png = image.resize({ width: 256, height: 256 }).toPNG()
       await writeFile(iconPath, icoFile([{ size: 256, png }]))
     }
-    if (window && !window.isDestroyed()) { window.setIcon(image); window.setAppDetails({ appId: 'io.dsbotdeck.desktop', appIconPath: iconPath, appIconIndex: 0 }) }
+    if (window && !window.isDestroyed()) {
+      traceWindow({ event: 'window-icon-before' })
+      window.setIcon(image); window.setAppDetails({ appId: 'io.dsbotdeck.desktop', appIconPath: iconPath, appIconIndex: 0 })
+      traceWindow({ event: 'window-icon-after' })
+    }
     tray?.setImage(bytes ? image.resize({ width: 20, height: 20 }) : nativeImage.createFromPath(path.join(dist, 'assets/tray.ico')))
     let shortcutSynced = true
     if (app.isPackaged && !assets.iconNeedsRaster()) {
@@ -159,7 +179,13 @@ async function start(): Promise<void> {
       webPreferences: { preload: path.join(dist, 'preload/shell.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false },
     })
     window = created; windowReady = false
+    const windowId = created.id
+    const report = (entry: WindowDiagnosticRecord): void => traceWindow({ ...entry, windowId }, created)
+    report({ event: 'window-created', saved, target: restoreWindowBounds(null, area), minimum })
+    for (const reason of ['move', 'resize', 'maximize', 'unmaximize', 'minimize', 'restore', 'enter-full-screen', 'leave-full-screen', 'show', 'hide', 'focus', 'blur', 'ready-to-show'] as const) created.on(reason, () => report({ event: 'window-event', reason }))
+    report({ event: 'window-menu-before' })
     created.setMenu(null)
+    report({ event: 'window-menu-after' })
     views = new ContentViews(created, manager, dist, gate, message => { if (!created.webContents.isDestroyed()) created.webContents.send('deck:view-error', message) }, () => assets.hasBackground())
     iconSignature = ''
     void localAction(applyIcon).catch(() => { assets.warn('图标缓存未能应用；请检查客户端数据目录权限。'); publishAssets() })
@@ -170,19 +196,25 @@ async function start(): Promise<void> {
       if (created.isMinimized() || created.isFullScreen()) return
       const next = minimumWindowSize(screen.getDisplayMatching(created.getBounds()).workArea)
       const [width, height] = created.getMinimumSize()
-      if (width !== next.width || height !== next.height) created.setMinimumSize(next.width, next.height)
+      if (width !== next.width || height !== next.height) {
+        report({ event: 'window-minimum-before', minimum: next })
+        created.setMinimumSize(next.width, next.height)
+        report({ event: 'window-minimum-after', minimum: next })
+      }
     })
     created.on('show', () => views?.sync())
-    created.on('close', event => { if (!quitting) { event.preventDefault(); void saveWindow().catch(windowSaveFailed); created.hide() } })
-    created.on('closed', () => { windowState?.dispose(); windowState = null; windowReady = false; views?.close(); views = null; window = null })
+    created.on('close', event => { report({ event: 'window-close', reason: 'close' }); if (!quitting) { event.preventDefault(); void saveWindow('close').catch(windowSaveFailed); created.hide() } })
+    created.on('closed', () => { report({ event: 'window-closed' }); windowState?.dispose(); windowState = null; windowReady = false; views?.close(); views = null; window = null })
     created.once('ready-to-show', () => {
       if (quitting || window !== created || created.isDestroyed()) return
+      report({ event: 'window-ready', saved })
       const restoredArea = screen.getDisplayMatching(saved ?? created.getBounds()).workArea
-      restoreWindowLayout(created, saved, restoredArea)
+      restoreWindowLayout(created, saved, restoredArea, report)
       // 恢复后才记录；启动期间的默认矩形和程序性移动不覆盖旧保存值。
-      windowState = new WindowStateTracker(created, async state => { if (!startupError) await manager.saveWindow(state) }, windowSaveFailed, saved)
+      windowState = new WindowStateTracker(created, async (state, reason) => { if (!startupError) await manager.saveWindow(state, reason) }, windowSaveFailed, saved, report)
       windowReady = true
       created.show(); views?.sync()
+      report({ event: 'window-show-complete' })
       if (pendingSettings) { pendingSettings = false; created.webContents.send('deck:open-settings') }
     })
     void created.loadURL(`${SCHEME}://shell/index.html`).catch(() => {})
@@ -261,7 +293,9 @@ async function start(): Promise<void> {
   ipcMain.on('deck:theme', (event, value: unknown) => {
     const colors = record(value)
     if (owns(event) && window && typeof colors?.color === 'string' && typeof colors.ink === 'string' && /^#[a-f\d]{6}$/i.test(colors.color) && /^#[a-f\d]{6}$/i.test(colors.ink)) {
+      traceWindow({ event: 'window-theme-before', overlayHeight: 48 })
       window.setTitleBarOverlay({ color: '#00000000', symbolColor: colors.ink, height: 48 }); window.setBackgroundColor(colors.color)
+      traceWindow({ event: 'window-theme-after', overlayHeight: 48 })
     }
   })
   ipcMain.on('deck:content-ready', event => views?.ready(event))
@@ -284,6 +318,13 @@ async function start(): Promise<void> {
     tray?.setContextMenu(Menu.buildFromTemplate([
       { label: '打开 DSBotDeck', click: show },
       { label: manager.snapshot().pet.enabled ? '隐藏四色宠物' : '显示四色宠物', enabled: !startupError, click: () => { void manager.setPet({ enabled: !manager.snapshot().pet.enabled }).catch(() => {}) } },
+      { label: '打开窗口诊断日志文件夹', click: () => {
+        if (quitting) return
+        void diagnostics.flush().then(async () => {
+          const error = await shell.openPath(path.dirname(diagnostics.file))
+          if (error || diagnostics.problem) dialog.showErrorBox('窗口诊断日志', '诊断日志未能写入或打开，请检查本机客户端数据目录的权限；原配置不会因此被重置。')
+        }).catch(() => dialog.showErrorBox('窗口诊断日志', '未能打开诊断目录，请检查当前用户的目录权限。'))
+      } },
       { type: 'separator' },
       { label: '退出客户端（不停止远程 Bot）', click: () => app.quit() },
     ]))
@@ -299,8 +340,16 @@ async function start(): Promise<void> {
     event.preventDefault()
     if (quitting) return
     quitting = true
-    const saving = saveWindow(); windowState?.dispose()
+    traceWindow({ event: 'window-close', reason: 'before-quit' })
+    const saving = saveWindow('before-quit'); windowState?.dispose()
     void saving.catch(windowSaveFailed).then(() => localQueue).then(() => manager.stop()).finally(() => { stopped = true; views?.close(); pet.close(); tray?.destroy(); tray = null; app.quit() })
+  })
+  app.on('will-quit', event => {
+    if (diagnosticsStopped) return
+    event.preventDefault(); stopWatching()
+    for (const { event, listener } of displayListeners) screen.removeListener(event, listener)
+    diagnostics.record({ event: 'session-stop', saved: vault.windowState() })
+    void diagnostics.flush().finally(() => { diagnosticsStopped = true; app.quit() })
   })
   createWindow(); manager.start(); pet.sync()
 }
