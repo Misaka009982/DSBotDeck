@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { build as bundle } from 'esbuild'
 import { build as buildUi } from 'vite'
 import { paintSource } from './paint-source.mjs'
+import { createAppIcons, ICON_SOURCE_FILES } from './app-icons.mjs'
 import { adaptUiSource, BOOTSTRAP_ID, bootstrapText, inside, readUpstream, sourceReceipt, UI_PACKAGES } from './upstream.mjs'
 
 const clientRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -102,11 +103,8 @@ await mkdir(path.join(dist, 'licenses/jsQR'), { recursive: true })
 await copyFile(path.join(clientRoot, 'node_modules/jsqr/LICENSE'), path.join(dist, 'licenses/jsQR/LICENSE'))
 const assets = path.join(dist, 'assets')
 await mkdir(assets, { recursive: true })
-for (const name of ['icon.png', 'icon.ico', 'tray.png', 'tray.ico']) {
-  const from = path.join(upstream.root, 'app/assets', name)
-  await copyFile(from, path.join(assets, name))
-  inputs.add(from)
-}
+await createAppIcons(upstream.root, assets)
+for (const name of ICON_SOURCE_FILES) inputs.add(path.join(upstream.root, name))
 const receipt = await sourceReceipt(upstream, [...inputs])
 await writeFile(path.join(dist, 'upstream-sources.json'), `${JSON.stringify(receipt, null, 2)}\n`, 'utf8')
 console.log(`DSBotDeck 构建完成；上游 DS-Bot ${receipt.version}，提交 ${receipt.commit ?? '未知（源码目录不含 Git 元数据）'}。`)

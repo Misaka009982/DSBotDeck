@@ -16,7 +16,8 @@ import { RequestGate } from './request-gate.ts'
 import { ServerManager } from './server-manager.ts'
 import { Vault } from './vault.ts'
 import { syncStartMenuIcon } from './shortcut-icon.ts'
-import { minimumWindowSize, restoreWindowBounds, WindowStateTracker } from './window-state.ts'
+import { icoFile } from './icon-format.ts'
+import { minimumWindowSize, restoreWindowBounds, restoreWindowLayout, WindowStateTracker } from './window-state.ts'
 
 protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 app.setName('DSBotDeck')
@@ -56,6 +57,8 @@ async function start(): Promise<void> {
   const assets = new LocalAssets(path.join(homedir(), '.codex', 'pets'))
   await assets.refresh(manager.appearanceSettings(), manager.petSettings().skin)
   let window: BrowserWindow | null = null
+  let windowReady = false
+  let pendingSettings = false
   let views: ContentViews | null = null
   let tray: Tray | null = null
   let quitting = false
@@ -73,22 +76,26 @@ async function start(): Promise<void> {
   }
   const show = () => {
     if (window === null || window.isDestroyed()) createWindow()
-    if (!window) return
+    if (!window || !windowReady) return
     if (window.isMinimized()) window.restore()
     window.show(); window.focus(); views?.sync()
   }
-  const openSettings = () => { show(); window?.webContents.send('deck:open-settings') }
+  const openSettings = () => {
+    show()
+    if (!windowReady) pendingSettings = true
+    else window?.webContents.send('deck:open-settings')
+  }
   const pet = new PetWindow(manager, dist, show, openSettings)
   pet.updateAssets(assets.view('pet'))
   const publishAssets = () => {
     if (window && !window.webContents.isDestroyed()) window.webContents.send('deck:local-assets', assets.view('shell'))
     pet.updateAssets(assets.view('pet')); views?.sync()
   }
-  const applyIcon = async () => {
+  const applyIcon = async (force = false) => {
     const bytes = assets.iconNeedsRaster() ? null : assets.iconBytes()
     const source = manager.appearanceSettings().iconPath
     const signature = bytes ? createHash('sha256').update(bytes).digest('hex') : 'default'
-    if (signature === iconSignature) return
+    if (!force && signature === iconSignature) return
     let image = bytes ? nativeImage.createFromBuffer(bytes) : nativeImage.createFromPath(path.join(dist, 'assets/icon.png'))
     if (image.isEmpty() && source && bytes) image = nativeImage.createFromPath(source)
     if (image.isEmpty()) image = nativeImage.createFromPath(path.join(dist, 'assets/icon.png'))
@@ -102,9 +109,7 @@ async function start(): Promise<void> {
       iconPath = path.join(folder, `deck-${signature}.ico`)
       try { if ((await lstat(iconPath)).isSymbolicLink()) throw new DeckError('asset/refused', '图标缓存不能是链接。') } catch (error) { if (record(error)?.code !== 'ENOENT') throw error }
       const png = image.resize({ width: 256, height: 256 }).toPNG()
-      const header = Buffer.alloc(22)
-      header.writeUInt16LE(1, 2); header.writeUInt16LE(1, 4); header.writeUInt16LE(1, 10); header.writeUInt16LE(32, 12); header.writeUInt32LE(png.length, 14); header.writeUInt32LE(22, 18)
-      await writeFile(iconPath, Buffer.concat([header, png]))
+      await writeFile(iconPath, icoFile([{ size: 256, png }]))
     }
     if (window && !window.isDestroyed()) { window.setIcon(image); window.setAppDetails({ appId: 'io.dsbotdeck.desktop', appIconPath: iconPath, appIconIndex: 0 }) }
     tray?.setImage(bytes ? image.resize({ width: 20, height: 20 }) : nativeImage.createFromPath(path.join(dist, 'assets/tray.ico')))
@@ -116,9 +121,9 @@ async function start(): Promise<void> {
     }
     iconSignature = shortcutSynced ? signature : ''
   }
-  const refreshAssets = async () => {
+  const refreshAssets = async (forceIcon = false) => {
     await assets.refresh(manager.appearanceSettings(), manager.petSettings().skin)
-    try { await applyIcon() }
+    try { await applyIcon(forceIcon) }
     catch (error) { assets.warn('图标未能完整应用，请检查本机图片和客户端缓存目录权限。'); throw error }
     finally { publishAssets() }
   }
@@ -147,13 +152,13 @@ async function start(): Promise<void> {
     const area = (saved ? screen.getDisplayMatching(saved) : screen.getPrimaryDisplay()).workArea
     const minimum = minimumWindowSize(area)
     const created = new BrowserWindow({
-      ...restoreWindowBounds(saved, area), minWidth: minimum.width, minHeight: minimum.height, show: false, title: 'DSBotDeck',
+      // 构造只用默认尺寸，保存矩形在原生窗口就绪后显式恢复。
+      ...restoreWindowBounds(null, area), minWidth: minimum.width, minHeight: minimum.height, show: false, title: 'DSBotDeck',
       icon: path.join(dist, 'assets/icon.ico'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#333333', height: 48 },
       backgroundColor: '#ffffff',
       webPreferences: { preload: path.join(dist, 'preload/shell.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false },
     })
-    window = created
-    windowState = new WindowStateTracker(created, async state => { if (!startupError) await manager.saveWindow(state) }, windowSaveFailed)
+    window = created; windowReady = false
     created.setMenu(null)
     views = new ContentViews(created, manager, dist, gate, message => { if (!created.webContents.isDestroyed()) created.webContents.send('deck:view-error', message) }, () => assets.hasBackground())
     iconSignature = ''
@@ -169,8 +174,17 @@ async function start(): Promise<void> {
     })
     created.on('show', () => views?.sync())
     created.on('close', event => { if (!quitting) { event.preventDefault(); void saveWindow().catch(windowSaveFailed); created.hide() } })
-    created.on('closed', () => { windowState?.dispose(); windowState = null; views?.close(); views = null; window = null })
-    created.once('ready-to-show', () => { if (saved?.maximized) created.maximize(); created.show(); views?.sync() })
+    created.on('closed', () => { windowState?.dispose(); windowState = null; windowReady = false; views?.close(); views = null; window = null })
+    created.once('ready-to-show', () => {
+      if (quitting || window !== created || created.isDestroyed()) return
+      const restoredArea = screen.getDisplayMatching(saved ?? created.getBounds()).workArea
+      restoreWindowLayout(created, saved, restoredArea)
+      // 恢复后才记录；启动期间的默认矩形和程序性移动不覆盖旧保存值。
+      windowState = new WindowStateTracker(created, async state => { if (!startupError) await manager.saveWindow(state) }, windowSaveFailed, saved)
+      windowReady = true
+      created.show(); views?.sync()
+      if (pendingSettings) { pendingSettings = false; created.webContents.send('deck:open-settings') }
+    })
     void created.loadURL(`${SCHEME}://shell/index.html`).catch(() => {})
   }
   session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
@@ -226,7 +240,7 @@ async function start(): Promise<void> {
         await manager.setAppearance({ iconPath: null, builtinIcon: icon }); await refreshAssets()
       })
       case 'choose-asset': return localAction(() => chooseAsset(args.kind))
-      case 'refresh-assets': return localAction(refreshAssets)
+      case 'refresh-assets': return localAction(() => refreshAssets(true))
       case 'reset-asset': return localAction(async () => {
         if (!['icon', 'background', 'pets'].includes(String(args.kind))) throw new DeckError('bot/invalid', '不能重置此素材。')
         await manager.setAppearance(args.kind === 'icon' ? { iconPath: null, builtinIcon: null } : args.kind === 'background' ? { backgroundPath: null, backgroundCrop: null } : { petLibraryPath: null })

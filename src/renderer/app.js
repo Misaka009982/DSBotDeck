@@ -5,6 +5,7 @@ import { BotAvatar, BotMark } from '@dsbot/client/mark.js'
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon, DotsIcon, GearIcon, MonitorIcon, PeopleIcon, PlusIcon, SearchIcon, SidebarIcon, StarLineIcon } from '@dsbot/client/icons.js'
 import { groupEntities, serverLabel, settingsCommand, visibleServers } from '../shared/navigation.ts'
 import { backgroundLevels } from '../shared/appearance.ts'
+import { DEFAULT_APP_MARK } from '../shared/app-icon.ts'
 import { DeckSettings } from './deck-settings.js'
 import { useDeckLocale } from './deck-locale.js'
 import { useDeckTheme } from './deck-theme.js'
@@ -16,6 +17,9 @@ const api = window.dsbotDeck
 const COLOR_LABELS = { green: '运行', yellow: '待交互', red: '明确失败', blue: '完成待查看' }
 function storedCollapse() { try { return JSON.parse(localStorage.getItem('dsbotdeck.tree-collapsed') ?? '{}') } catch { return {} } }
 const button = (label, onClick, icon = null, props = {}) => h('button', { type: 'button', className: 'deck-icon', title: label, 'aria-label': label, onClick, ...props }, icon ? h(icon) : label)
+function AppIcon({ source, size }) {
+  return source ? h('img', { className: 'deck-app-icon', src: source, alt: '', style: { width: size, height: size } }) : h(BotMark, { look: DEFAULT_APP_MARK, size })
+}
 function Sheet({ mode, server, busy, error, run, close }) {
   const [alias, setAlias] = useState(server?.alias ?? '')
   const [uri, setUri] = useState('')
@@ -144,7 +148,7 @@ export function App() {
     '--deck-wallpaper': assets?.background ? `url("${assets.background}")` : 'none', '--deck-wallpaper-opacity': background.chat, '--deck-surface-tint': background.tint, '--deck-wallpaper-blur': `${local?.blur ?? 0}px`, '--deck-wallpaper-fit': placement ? `${placement.width}px ${placement.height}px` : local?.fit ?? 'cover', '--deck-wallpaper-position': placement ? `${placement.x}px ${placement.y}px` : 'center',
   } },
     h('aside', { className: 'deck-side' },
-      h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), assets?.icon ? h('img', { className: 'deck-app-icon', src: assets.icon, alt: '' }) : h(BotMark, { size: 24 }), h('span', { className: 'deck-brand-name' }, 'DSBotDeck'),
+      h('header', { className: 'deck-brand' }, h('div', { className: 'dsb-band' }), h(AppIcon, { source: assets?.icon, size: 24 }), h('span', { className: 'deck-brand-name' }, 'DSBotDeck'),
         button(rail ? '展开侧栏' : '折叠侧栏', () => { setMenu(null); setRail(value => !value) }, SidebarIcon, { 'aria-expanded': !rail, 'aria-controls': 'deck-server-tree' }),
         button('添加服务器', () => openSheet('pair'), PlusIcon, { className: 'deck-icon deck-add-server', disabled: Boolean(snapshot?.startupError) })),
       h('label', { className: 'deck-search' }, h(SearchIcon), h('input', { type: 'search', placeholder: '搜索服务器、Bot 或群聊', 'aria-label': '搜索服务器、Bot 或群聊', value: search, onChange: event => setSearch(event.target.value) })),
@@ -190,7 +194,7 @@ export function App() {
       h('footer', { className: 'deck-side-foot' },
         h('button', { type: 'button', className: 'bt-soft deck-open-settings', title: 'Deck 设置', 'aria-label': 'Deck 设置', onClick: () => openSheet('deck') }, h(GearIcon), h('span', null, 'Deck 设置')))),
     h('main', { ref: viewport, className: 'deck-content-slot', 'aria-label': '原 DS-Bot 界面' },
-      !snapshot || !active ? h('div', { className: 'deck-welcome' }, h(BotMark, { size: 72 }), h('h1', null, '连接远程 DS-Bot'), h('p', null, '原团队界面，多服务器导航。客户端不会启动本地 DSH。'), h('button', { type: 'button', className: 'bt-send', disabled: Boolean(snapshot?.startupError), onClick: () => openSheet('pair') }, '添加服务器')) : null,
+      !snapshot || !active ? h('div', { className: 'deck-welcome' }, h(AppIcon, { source: assets?.icon, size: 72 }), h('h1', null, '连接远程 DS-Bot'), h('p', null, '原团队界面，多服务器导航。客户端不会启动本地 DSH。'), h('button', { type: 'button', className: 'bt-send', disabled: Boolean(snapshot?.startupError), onClick: () => openSheet('pair') }, '添加服务器')) : null,
       viewError ? h('div', { className: 'deck-view-error', role: 'alert' }, h('p', null, viewError), h('button', { type: 'button', className: 'bt-soft', onClick: () => void run(() => api.reopen(active.id)) }, '重新打开界面')) : null),
     snapshot?.startupError ? h('div', { className: 'deck-error-banner', role: 'alert' }, snapshot.startupError) : null,
     error && !sheet ? h('div', { className: 'deck-toast', role: 'alert' }, error, button('关闭提示', () => setError(null), CloseIcon)) : null,

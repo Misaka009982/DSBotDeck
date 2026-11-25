@@ -17,6 +17,8 @@ src/remote/app.js 是对上游独立 UI 入口的客户端适配，增加服务�
 入口适配与 scripts/paint-source.mjs 仅在构建内存中增加非视觉的成功呈现回调，
 不保存上游修改或 UI 副本。
 图标与宠物的 BotMark 使用 DS-Bot 自有素材，仅说明所连接的产品。
+默认应用图标从上游 characterMarkup 的 star/aurora 原五角星渐变生成，
+本项目只在自身构建目录输出 PNG/ICO，不复制素材表或改写上游资源。
 本项目不是 DeepSeek 或 DS-Bot 上游的官方发行版。
 
 上游完整归属说明保留在 licenses/DS-Bot/NOTICE；构建产物同时携带

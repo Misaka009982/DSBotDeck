@@ -5,8 +5,8 @@ import { CloseIcon } from '@dsbot/client/icons.js'
 import { CharacterGrid } from '@dsbot/client/bot-settings.js'
 import { ThemeGallery } from '@dsbot/client/settings.js'
 import { allThemes } from '@dsbot/themes'
-import { MAIN_LOOK } from '@dsbot/client/characters.js'
-import { lookOf } from '@dsbot/client/mark.js'
+import { DEFAULT_APP_MARK } from '../shared/app-icon.ts'
+import { BotMark, lookOf } from '@dsbot/client/mark.js'
 import { renderBuiltinIcon } from './builtin-icon.js'
 import { PetSprite } from './pet-sprite.js'
 import { BackgroundCropper } from './background-cropper.js'
@@ -41,9 +41,9 @@ export function DeckSettings({ snapshot, assets, dark, busy, error, run, close }
   const prefs = snapshot?.appearance ?? { theme: 'deepseek', themeMode: 'system', opacity: 0.25, blur: 0, fit: 'cover' }
   const pet = snapshot?.pet ?? { enabled: false, locked: false, alwaysOnTop: true, skin: null, size: 112 }
   const act = callback => void run(callback)
-  const iconLook = prefs.builtinIcon?.look ?? MAIN_LOOK
+  const iconLook = prefs.builtinIcon?.look ?? DEFAULT_APP_MARK
   const petLook = pet.mark ?? lookOf()
-  const grid = (look, change) => h('fieldset', { className: 'deck-character-grid', disabled }, h(CharacterGrid, { look, onShape: shape => change({ ...look, shape }), onColor: color => change({ ...look, color }) }))
+  const grid = (look, change, hasPhoto = false) => h('fieldset', { className: 'deck-character-grid', disabled }, h(CharacterGrid, { look, hasPhoto, onShape: shape => change({ ...look, shape }), onColor: color => change({ ...look, color }) }))
   const chooseIcon = look => act(async () => api.builtinIcon(look, await renderBuiltinIcon(look)))
   const choosePetMark = mark => act(() => api.pet({ skin: null, mark }))
   const choose = kind => act(() => api.chooseAsset(kind))
@@ -65,11 +65,12 @@ export function DeckSettings({ snapshot, assets, dark, busy, error, run, close }
           [['zh', '简体中文'], ['zh-TW', '繁體中文'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['system', '跟随本机系统']].map(([value, label]) => h('option', { key: value, value }, label)))),
         h('p', { className: 'deck-hint' }, '使用上游原词典，默认简体中文；不改变服务器配置或 Bot 回复语言。Deck 自身说明保持简体中文，工具原名、模型名和会话内容不强制翻译。')),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '程序图标'),
-        h('div', { className: 'deck-setting-actions' }, assets?.icon ? h('img', { className: 'deck-icon-preview', src: assets.icon, alt: '当前 Deck 图标' }) : null,
+        h('div', { className: 'deck-setting-actions' }, assets?.icon ? h('img', { className: 'deck-icon-preview', src: assets.icon, alt: '当前 Deck 图标' }) : h(BotMark, { look: DEFAULT_APP_MARK, size: 36 }),
           h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('icon') }, '选择本地图标'),
+          h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => act(api.refreshAssets) }, '重新应用图标'),
           h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.iconPath && !prefs.builtinIcon, onClick: () => reset('icon') }, '恢复默认图标')),
-        h('details', { className: 'deck-builtin-picker' }, h('summary', null, 'DS-Bot 内置图标与颜色'), grid(iconLook, chooseIcon)),
-        h('p', { className: 'deck-hint' }, '用于 Deck Logo、窗口、运行中的任务栏和托盘，并同步当前安装的开始菜单入口。Windows 已固定项可能需重新固定才能刷新。')),
+        h('details', { className: 'deck-builtin-picker' }, h('summary', null, 'DS-Bot 内置图标与颜色'), grid(iconLook, chooseIcon, Boolean(prefs.iconPath))),
+        h('p', { className: 'deck-hint' }, '默认使用原五角星渐变。设置用于 Deck Logo、窗口、运行任务栏与托盘，并尝试同步当前安装的开始菜单入口；不会改写 EXE 或安装包。可重新应用重试，系统已固定项可能需重新固定；同步失败不提权。')),
       h('section', { className: 'deck-setting-block' }, h('h3', null, '整个程序背景'),
         h('div', { className: 'deck-setting-actions' }, h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('background') }, '选择背景图片'), h('button', { type: 'button', className: 'bt-soft', disabled: disabled || !prefs.backgroundPath, onClick: () => reset('background') }, '移除背景')),
         h('p', { className: 'deck-hint' }, '本机图片覆盖整个窗口，包括聊天区；不使用服务器背景，也不改写服务器主题。'),
