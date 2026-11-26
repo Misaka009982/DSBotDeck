@@ -10,6 +10,7 @@ test('Bot名称只打开其稳定编号设置，头像和尾部仍调用原详�
     type: 'button', className: 'bt-pill', 'aria-expanded': true, onClick: () => calls.push(['details', 'part-a']),
     children: ['头像', '同名 Bot', null, '箭头'] })
   assert.equal(view.type, 'div')
+  assert.ok('children' in view.props && Array.isArray(view.props.children))
   const [avatar, name, tail] = view.props.children
   assert.equal(avatar.type, 'button'); assert.equal(name.type, 'button'); assert.equal(tail.type, 'button')
   name.props.onClick(); assert.deepEqual(calls, [['bots', 'bot-a']])
@@ -23,7 +24,9 @@ test('群聊、返回聊天和未提供设置动作仍沿用原按钮，不借Bo
   for (const botId of [undefined, null, '']) {
     const view = HeaderActions({ botId, name: '原名称', openSettings: () => { throw new Error('不应打开Bot设置') },
       children, type: 'button', className: 'bt-pill', onClick: () => { opened++ } })
-    assert.equal(view.type, 'button'); assert.equal(view.props.children, children)
+    assert.equal(view.type, 'button')
+    assert.ok('children' in view.props && 'onClick' in view.props && typeof view.props.onClick === 'function')
+    assert.equal(view.props.children, children)
     view.props.onClick()
   }
   assert.equal(opened, 3)
