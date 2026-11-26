@@ -46,7 +46,7 @@ const self = { id: 'bot-a', name: '甲' }; const other = { id: 'bot-b', name: '�
 const room = { id: 'room-a', members: [self.id, other.id, 'removed'] }
 const roster = { ready: true, bots: [self, other, outside], rooms: [room], byId: { [self.id]: self, [other.id]: other, [outside.id]: outside }, roomsById: { [room.id]: room } }
 test('真实上游提及规则：私聊排除自身，群聊仅列当前成员和全体', () => {
-  assert.deepEqual(mentionRows(roster, self.id, '新')?.map(row => row.text), ['@新 Bot 2 '])
+  assert.deepEqual(mentionRows(roster, self.id, '新')?.map((row: { text: string }) => row.text), ['@新 Bot 2 '])
   assert.deepEqual(mentionRows(roster, self.id, '甲'), [])
   const members: { bot?: { id: string }; room?: { id: string }; text: string }[] = mentionRows(roster, room.id, '') ?? []
   assert.deepEqual(members.flatMap(row => row.bot ? [row.bot.id] : []), [self.id, other.id])
