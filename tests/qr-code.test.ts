@@ -3,6 +3,8 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import qrcode from 'qrcode-generator'
+import { pairingUri } from '@dsbot/link'
+import { newIdentity, pairingOffer } from '../src/main/link-factory.ts'
 import { pairingQr } from '../src/shared/qr-code.ts'
 function pixels(text: string, inverse = false) {
   const code = qrcode(0, 'M'); code.addData(text); code.make()
@@ -31,4 +33,20 @@ test('截图识别拒绝非配对码、空白图和异常像素预算', () => {
   assert.throws(() => pairingQr(new Uint8ClampedArray(100 * 100 * 4).fill(255), 100, 100), /没有识别到/)
   assert.throws(() => pairingQr(new Uint8ClampedArray(4), 100000, 100000), /尺寸/)
   assert.throws(() => pairingQr(new Uint8ClampedArray(4), 100, 100), /尺寸/)
+})
+test('二维码名称元信息经URI编码保留，识别不改配对码、类别或主机字段', () => {
+  const host = newIdentity()
+  const uri = pairingUri({ server: 'wss://relay.example/v1/link', hostDeviceId: host.deviceId, hostKey: host.publicKey, device: 'browser', code: 'fictional-fixture', name: '杭州服务器 + 100% & team' })
+  const input = new URL(uri)
+  for (const text of [uri, `https://relay.example/web/#pair=${encodeURIComponent(uri)}`]) {
+    const image = pixels(text)
+    const decoded = pairingQr(image.data, image.side, image.side)
+    assert.equal(decoded, uri)
+    const query = new URL(decoded).searchParams
+    assert.equal(query.get('name'), '杭州服务器 + 100% & team')
+    for (const field of ['v', 'device', 'code', 'host', 'key', 'server']) assert.equal(query.get(field), input.searchParams.get(field))
+    const offer = pairingOffer(decoded)
+    assert.equal(offer.name, '杭州服务器 + 100% & team'); assert.equal(offer.device, 'browser')
+    assert.equal(offer.hostDeviceId, host.deviceId); assert.equal(offer.hostKey, host.publicKey)
+  }
 })

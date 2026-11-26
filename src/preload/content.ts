@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('dsbotContent', {
   version: 1,
   onCommand: (listener: (value: ContentCommand) => void) => subscribe('deck:content-command', listener),
   onStatus: (listener: (value: ContentStatus) => void) => subscribe('deck:content-status', listener),
+  drafts: (value: boolean) => ipcRenderer.send('deck:content-drafts', value === true),
   ready: () => ipcRenderer.send('deck:content-ready'),
   selected: (kind: 'bot' | 'room', id: string) => ipcRenderer.send('deck:content-selected', { kind, id }),
   viewed: (kind: 'bot' | 'room', id: string) => ipcRenderer.send('deck:content-viewed', { kind, id }),

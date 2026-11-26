@@ -12,6 +12,18 @@ const rectangle = { x: -1400, y: 80, width: 720, height: 540 }
 const state = { ...rectangle, maximized: false }
 const rows = async (file: string): Promise<Record<string, unknown>[]> => (await readFile(file, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
 
+test('恢复校准只新增请求矩形和次数数字，额外字段仍不入日志', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-window-diagnostics-'))
+  try {
+    const file = path.join(directory, 'window-state.jsonl'); const diagnostics = new WindowDiagnostics(file, '0.1.6')
+    const report = { event: 'restore-correction' as const, target: rectangle, requested: { ...rectangle, width: 718, secret: '虚构校准凭据' }, attempt: 2 }
+    diagnostics.record(report)
+    await diagnostics.flush()
+    const [row] = await rows(file)
+    assert.deepEqual(row.requested, { ...rectangle, width: 718 }); assert.deepEqual(row.target, rectangle); assert.equal(row.attempt, 2)
+    assert.equal(JSON.stringify(row).includes('虚构校准凭据'), false)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
 test('诊断只输出白名单窗口与文件字段，额外凭据、路径和错误正文不入日志', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-window-diagnostics-'))
   try {

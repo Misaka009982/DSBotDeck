@@ -2,7 +2,7 @@
 // 回归只作定义；不运行应用、工具或真实服务器。
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { preferInputStatus, toolSummaries, workToolNote } from '../src/shared/tool-model.ts'
+import { preferInputStatus, toolCalls, toolSummaries, workToolNote } from '../src/shared/tool-model.ts'
 
 test('当前工具原名优先于泛化说辞，新输入不遮住服务器仍报告的工具', () => {
   const note = workToolNote({ tool: 'job_output', said: 'Weighing the options', since: 1 })
@@ -44,6 +44,13 @@ test('重复工具保持顺序，损坏行跳过，缺失名称明确保留为�
     { name: null, label: null, outcome: 'unknown' },
   ])
   for (const value of [null, [], { kind: 'bot', tools: [{ name: 'read_file' }] }, { kind: 'steps', tools: 'invalid' }]) assert.deepEqual(toolSummaries(value), [])
+})
+test('调用关联保留真实会话、seq和父调用，非法关联不退回当前会话猜测', () => {
+  const calls = toolCalls({ kind: 'steps', sessionId: 'part-a', tools: [{ name: 'read', callId: 'a', callSeq: 1, parentCallId: 'parent-a', turn: 2, description: '核对定义' }, { callId: 'b', sessionId: 'part-b' }] }, 'fallback-part')
+  assert.deepEqual(calls[0].reference, { sessionId: 'part-a', callId: 'a', callSeq: 1, parentCallId: 'parent-a' })
+  assert.equal(calls[0].description, '核对定义'); assert.equal(calls[0].turn, 2)
+  assert.equal(calls[1].reference?.sessionId, 'part-b')
+  for (const bad of [{ callId: '' }, { callId: 'a', callSeq: -1 }, { callId: 'a', callSeq: '1' }, { callId: 'a', sessionId: 'x'.repeat(201) }]) assert.equal(toolCalls({ kind: 'steps', sessionId: 'part-a', tools: [bad] })[0].reference, null)
 })
 test('思考时间、原始参数和输出不进入工具摘要，也不修改原记录', () => {
   const entry = { kind: 'steps', ms: 9999, time: 123, tools: [{ name: 'read_file', ok: true, arguments: 'fictional-private-args', content: 'fictional-private-output' }] }

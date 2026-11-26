@@ -52,6 +52,75 @@ test('群聊后台任务归属群聊，不把失败或完成混进 Bot 私聊', 
   assert.equal(view.entities.find(entity => entity.kind === 'room')?.task, 'red')
   assert.equal(model.taskKey('bot-a', 'group-task'), 'room:room-a')
 })
+test('当前运行覆盖旧阻塞，待交互仍优先，运行结束不会伪造成功清除阻塞', () => {
+  const model = new TaskModel()
+  const blocked = team({ bots: [{ id: 'bot-a', blocked: { code: 'ACCOUNT_QUOTA' } }] })
+  assert.equal(model.project(blocked).entities[0].task, 'red')
+  const working = { ...blocked, work: { bots: { 'bot-a': { tool: 'read', since: 2 } }, rooms: {}, approvals: [] } }
+  const active = model.project(working).entities[0]
+  assert.equal(active.task, 'green'); assert.equal(active.detail, '远程工作进行中')
+  assert.equal(model.project({ ...working, questions: { 'bot-a': { id: 'question-a' } } }).entities[0].task, 'yellow')
+  assert.equal(model.project(blocked).entities[0].task, 'red')
+  model.notice({ kind: 'message', botId: 'bot-a', seq: 1 }, 'boot-a')
+  assert.equal(model.project(team()).entities[0].task, 'blue')
+})
+test('新工作不会永久确认旧失败，群聊活动和失败仍按原归属计算', () => {
+  const model = new TaskModel()
+  const failed = team({ bots: [{ id: 'bot-a', tasks: [{ id: 'failed-a', status: 'failed', error: '旧任务失败' }] }] })
+  assert.equal(model.project({ ...failed, work: { bots: { 'bot-a': { tool: 'read' } }, rooms: {} } }).entities[0].task, 'green')
+  assert.equal(model.project(failed).entities[0].task, 'red')
+  const group = { ...failed, rooms: [{ id: 'room-a' }], bots: [{ id: 'bot-a', tasks: [{ id: 'failed-group', roomId: 'room-a', status: 'failed' }] }], work: { bots: {}, rooms: { 'room-a': [{ botId: 'bot-a', tool: 'read' }] } } }
+  const view = model.project(group)
+  assert.equal(view.entities.find(entity => entity.kind === 'room')?.task, 'green')
+  assert.equal(view.entities.find(entity => entity.kind === 'bot')?.task, 'green')
+  assert.equal(model.project({ ...group, work: { bots: {}, rooms: {} } }).entities.find(entity => entity.kind === 'room')?.task, 'red')
+})
+test('私聊已正常回复且阻塞撤销，独立后台失败和另一Bot故障仍保留各自事实', () => {
+  const model = new TaskModel()
+  const failedTask = { id: 'task-old', status: 'failed', error: '独立后台任务失败', endedAt: 8 }
+  const initial = team({ bots: [
+    { id: 'bot-a', blocked: { code: 'ACCOUNT_QUOTA' }, tasks: [failedTask] },
+    { id: 'bot-b', blocked: { code: 'AUTH' }, tasks: [] },
+  ] })
+  model.project(initial)
+  model.notice({ kind: 'message', botId: 'bot-a', seq: 9 }, 'boot-a')
+  const completed = team({ bots: [
+    { id: 'bot-a', tasks: [failedTask] },
+    { id: 'bot-b', blocked: { code: 'AUTH' }, tasks: [] },
+  ] })
+  const before = structuredClone(completed)
+  const view = model.project(completed)
+  const own = view.entities.find(entity => entity.id === 'bot-a')
+  assert.equal(own?.task, 'red'); assert.equal(own?.detail, '独立后台任务失败')
+  assert.equal(view.entities.find(entity => entity.id === 'bot-b')?.task, 'red')
+  assert.notEqual(model.pendingToken('bot:bot-a'), null)
+  assert.deepEqual(countEntities(view.entities), { green: 0, yellow: 0, red: 2, blue: 0 })
+  assert.deepEqual(completed, before)
+})
+test('部分回复、取消和普通结果通知不代替完成快照或清除真实阻塞', () => {
+  const model = new TaskModel()
+  const blocked = team({ bots: [{ id: 'bot-a', blocked: { code: 'ACCOUNT_QUOTA' } }] })
+  model.project(blocked)
+  assert.equal(model.notice({ kind: 'stream', botId: 'bot-a', seq: 1 }, 'boot-a'), false)
+  assert.equal(model.notice({ kind: 'stopped', botId: 'bot-a', seq: 2 }, 'boot-a'), false)
+  assert.equal(model.project(blocked).entities[0].task, 'red')
+  model.notice({ kind: 'done', botId: 'bot-a', seq: 3 }, 'boot-a')
+  assert.equal(model.project(blocked).entities[0].task, 'red')
+  assert.equal(model.project({ ...blocked, work: { bots: { 'bot-a': { tool: 'read' } }, rooms: {} } }).entities[0].task, 'green')
+  assert.equal(model.project(blocked).entities[0].task, 'red')
+  assert.equal(model.project(team()).entities[0].task, 'blue')
+})
+test('新建会话或暂停回执不代替故障恢复，换Session仍保留服务器blocked', () => {
+  const model = new TaskModel()
+  const before = team({ bots: [{ id: 'bot-a', sessionId: 'part-a', blocked: { code: 'ACCOUNT_QUOTA' } }] })
+  model.project(before)
+  assert.equal(model.notice({ kind: 'tool-result', botId: 'bot-a', seq: 1, result: { paused: true, session_changed: true, recovery_verified: false } }, 'boot-a'), false)
+  const after = team({ bots: [{ id: 'bot-a', sessionId: 'part-b', blocked: { code: 'ACCOUNT_QUOTA' } }] })
+  const copy = structuredClone(after)
+  assert.equal(model.project(after).entities[0].task, 'red')
+  assert.equal(model.pendingToken('bot:bot-a'), null)
+  assert.deepEqual(after, copy)
+})
 test('停止和中断不冒充明确失败，取消关注不计数', () => {
   const model = new TaskModel()
   const view = model.project(team({ bots: [{ id: 'bot-a', tasks: [{ id: 'task-a', status: 'interrupted' }, { id: 'task-b', status: 'stopped' }] }] }))

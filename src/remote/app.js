@@ -3,12 +3,18 @@
 // Copyright 2026 Fei2411 and the DS Bot contributors
 import { Component, createElement as h, Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { ErrorToast } from '@dsbot/client/feedback.js'
+import { call } from '@dsbot/client/api.js'
+import { resetExtraReads } from '../shared/extra-read-model.ts'
+import { sessionResourceTarget } from '../shared/resource-model.ts'
+import { ResourceContext } from './resource-read.js'
+import { ResourceEntries } from './resource-entry.js'
+import { WorkspaceDraftShelf } from './workspace-editor.js'
+import { PrivateGoalBar } from './private-goal.js'
 import { HeaderPill } from '@dsbot/client/header.js'
 import { Overlays } from '@dsbot/client/overlays.js'
 import { currentPart } from '@dsbot/client/text.js'
 import { Chat } from '@dsbot/ui/chat.js'
 import { createTeam } from '@dsbot/ui/team.js'
-import { settingsCommand } from '../shared/navigation.ts'
 import { useDeckLocale } from '../renderer/deck-locale.js'
 import { useDeckTheme } from '../renderer/deck-theme.js'
 
@@ -42,23 +48,18 @@ export function App() {
   const shown = hooks.useShown(value => value)
   const [status, setStatus] = useState({ cached: true, alias: '远程 DS-Bot', state: 'connecting', error: null })
   const [feedLost, setFeedLost] = useState(true)
+  const [resourceEpoch, setResourceEpoch] = useState(0)
   const [packet, setPacket] = useState(null)
   const localeReady = useDeckLocale(status.uiLanguage ?? 'zh')
   const cachedRef = useRef(true)
   cachedRef.current = status.cached || feedLost
   const views = { ...hooks, actions, useFrame, useSidebarPref: useHiddenSidebar }
-  const headerActions = { ...actions, toggleDetails: id => {
-    const target = targetOf(roster, id)
-    if (!target) return actions.toggleDetails(id)
-    const settings = settingsCommand(target)
-    actions.openSettings(settings.page, settings.id)
-  } }
   useDeckTheme(status.uiTheme, roster.prefs)
   useEffect(() => team.start(), [team])
   useEffect(() => {
     const offCommand = bridge.onCommand(setPacket)
     const offStatus = bridge.onStatus(setStatus)
-    const offFeed = team.chat.on(event => { if (event === 'lost') setFeedLost(true); if (event === 'hello') setFeedLost(false) })
+    const offFeed = team.chat.on(event => { if (event === 'lost') { resetExtraReads(call); setFeedLost(true); setResourceEpoch(value => value + 1) }; if (event === 'hello') setFeedLost(false) })
     const visible = node => {
       if (!node || cachedRef.current || document.visibilityState !== 'visible' || node.scrollHeight - node.scrollTop - node.clientHeight > 80 || node.closest('[data-leaving]')) return false
       const box = node.getBoundingClientRect()
@@ -115,15 +116,18 @@ export function App() {
   }
   const visibleShown = shown && (roster.byId[shown] || roster.roomsById[shown]) ? shown : null
   if (!localeReady) return null
-  return h('div', { className: 'deck-remote-frame' },
+  return h(ResourceContext.Provider, { value: { roster, cached, epoch: resourceEpoch, selection: shown, actions } }, h('div', { className: 'deck-remote-frame' },
     cached ? h('div', { className: 'deck-cache-banner', role: 'status' }, `${status.alias} · 缓存 · 完成状态待确认`, status.error ? h('span', null, status.error) : null) : null,
     h('fieldset', { className: 'deck-remote-controls', disabled: cached },
       h('main', { className: 'dsb-main dsb_centerCol' },
         h('div', { className: 'dsb-band' }),
         visibleShown ? h(Fragment, { key: visibleShown },
-          h('div', { className: 'dsb-head' }, h(HeaderPill, { ...views, actions: headerActions, sessionId: visibleShown, useSession: team.sessionHook(visibleShown) })),
+          h('div', { className: 'dsb-head' }, h(HeaderPill, { ...views, sessionId: visibleShown, useSession: team.sessionHook(visibleShown) })),
+          h(PrivateGoalBar, { sessionId: visibleShown }),
+          h(ResourceEntries, { target: sessionResourceTarget(roster, visibleShown) }),
           h(Chat, { key: visibleShown, sessionId: visibleShown, team }))
           : h('div', { className: 'deck-remote-empty' }, roster.ready ? '此服务器暂无可显示的 Bot，可从服务器菜单新建。' : '正在读取远程团队…'))),
+    h(WorkspaceDraftShelf),
     h(Contain, { onError: closeOverlays }, h(Overlays, views)),
-    h(ErrorToast, views))
+    h(ErrorToast, views)))
 }

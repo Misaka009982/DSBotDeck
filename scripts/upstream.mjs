@@ -7,11 +7,12 @@ import { paintSource, SCOPED_UI_FILES } from './paint-source.mjs'
 
 export const REFERENCE_COMMIT = 'd104d9ca18d69a35460f14e15dff4d553181433a'
 export const BOOTSTRAP_ID = '\0dsbotdeck-bootstrap'
-export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'deep-view', 'react-markdown', 'remark-gfm'])
+export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'deep-view', 'react-markdown', 'remark-gfm', '@xterm/xterm', '@xterm/addon-fit'])
 const REQUIRED = [
   'app/ui/src/main.js', 'app/ui/src/app.js', 'app/ui/src/team.js', 'app/ui/src/chat.js',
   'app/ui/src/primitives.js', 'ds-bot/package.json', 'ds-bot/src/client/api.js', 'ds-bot/src/client/themes.js',
   'ds-bot/src/client/mark.js', 'ds-bot/src/client/overlays.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', 'ds-bot/src/client/activity-row.js',
+  'ds-bot/src/client/at-menu.js', 'ds-bot/src/client/command-actions.js',
   ...SCOPED_UI_FILES,
   'ds-bot/src/shared/browser-endpoints.js', 'mobile/src/team/gated.ts',
   'mobile/src/team/notices.ts', 'link/src/index.ts', 'LICENSE', 'NOTICE',
@@ -40,8 +41,18 @@ export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   if (specifier === '@dsbot/characters') return path.join(sourceRoot, 'ds-bot/src/client/characters.js')
   if (specifier === '@dsbot/themes') return path.join(sourceRoot, 'ds-bot/src/client/themes.js')
   if (specifier === '@dsbot/bootstrap') return BOOTSTRAP_ID
+  if (specifier === '@dsbotdeck/private-goal') return path.join(clientRoot, 'src/remote/private-goal.js')
+  if (specifier === '@dsbotdeck/composer-menu') return path.join(clientRoot, 'src/remote/composer-menu.js')
+  if (specifier === '@dsbotdeck/peer-event') return path.join(clientRoot, 'src/remote/peer-event.js')
+  if (specifier === '@dsbotdeck/chat-model') return path.join(clientRoot, 'src/shared/chat-model.ts')
   if (specifier === '@dsbotdeck/tool-steps') return path.join(clientRoot, 'src/remote/tool-steps.js')
+  if (specifier === '@dsbotdeck/resource-entry') return path.join(clientRoot, 'src/remote/resource-entry.js')
   if (specifier === '@dsbotdeck/tool-model') return path.join(clientRoot, 'src/shared/tool-model.ts')
+  if (specifier === '@dsbotdeck/tool-history') return path.join(clientRoot, 'src/shared/tool-history.ts')
+  if (specifier === '@dsbotdeck/extra-read') return path.join(clientRoot, 'src/shared/extra-read-model.ts')
+  if (specifier === '@dsbotdeck/remote-capabilities') return path.join(clientRoot, 'src/shared/remote-capabilities.ts')
+  if (specifier === '@dsbotdeck/validation') return path.join(clientRoot, 'src/shared/validation.ts')
+  if (specifier === '@dsbotdeck/message-note') return path.join(clientRoot, 'src/remote/message-note.js')
   if (specifier === '@dsbotdeck/approval-model') return path.join(clientRoot, 'src/shared/approval-model.ts')
   if (specifier === '@dsbotdeck/tool-refresh') return path.join(clientRoot, 'src/shared/tool-refresh.ts')
   if (importer === BOOTSTRAP_ID && specifier.startsWith('.')) return path.resolve(path.dirname(main), specifier)

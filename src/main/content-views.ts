@@ -15,6 +15,7 @@ interface Entry {
   view: WebContentsView
   ready: boolean
   failed: boolean
+  drafts: boolean
   usedAt: number
   pending: ContentCommand | null
   receipts: Map<string, ReadReceipt>
@@ -65,7 +66,7 @@ export class ContentViews {
       nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
     } })
     view.setBackgroundColor('#00000000')
-    const entry: Entry = { instance: randomUUID(), view, ready: false, failed: false, usedAt: Date.now(), pending: null, receipts: new Map() }
+    const entry: Entry = { instance: randomUUID(), view, ready: false, failed: false, drafts: false, usedAt: Date.now(), pending: null, receipts: new Map() }
     this.entries.set(id, entry)
     this.window.contentView.addChildView(view)
     view.setVisible(false)
@@ -79,8 +80,9 @@ export class ContentViews {
       return { action: 'deny' }
     })
     view.webContents.on('render-process-gone', () => {
-      entry.failed = true; entry.ready = false; entry.receipts.clear(); view.setVisible(false)
-      if (this.current === id) this.report('此服务器的界面进程已停止，目录和连接仍保留；请点击“重新打开界面”恢复。')
+      const lostDrafts = entry.drafts
+      entry.failed = true; entry.ready = false; entry.drafts = false; entry.receipts.clear(); view.setVisible(false)
+      if (this.current === id) this.report(lostDrafts ? '此服务器界面进程已停止，内存中的文件编辑已丢失；待确认的远程保存仍可能完成。可重新打开界面后核对服务器文件。' : '此服务器的界面进程已停止，目录和连接仍保留；请点击“重新打开界面”恢复。')
     })
     view.webContents.on('did-fail-load', (_event, _code, _description, _url, mainFrame) => {
       if (!mainFrame) return
@@ -115,7 +117,7 @@ export class ContentViews {
   }
   private trim(): void {
     if (this.entries.size <= 2) return
-    const candidates = [...this.entries.entries()].filter(([id]) => id !== this.current).sort((a, b) => a[1].usedAt - b[1].usedAt)
+    const candidates = [...this.entries.entries()].filter(([id, entry]) => id !== this.current && !entry.drafts).sort((a, b) => a[1].usedAt - b[1].usedAt)
     while (this.entries.size > 2 && candidates.length > 0) {
       const candidate = candidates.shift()
       if (candidate) this.remove(candidate[0])
@@ -185,7 +187,15 @@ export class ContentViews {
     if (!connection.valid(receipt.token)) return
     connection.acknowledge(receipt.key, receipt.pending, data.taskId); entry.receipts.delete(receiptKey)
   }
-  reopen(id: string): void { this.remove(id); if (this.current === id) this.sync() }
+  hasDrafts(id?: string): boolean { return id === undefined ? [...this.entries.values()].some(entry => entry.drafts) : this.entries.get(id)?.drafts === true }
+  drafts(event: IpcMainEvent, value: unknown): void {
+    const owned = this.owner(event)
+    if (owned && typeof value === 'boolean') owned[1].drafts = value
+  }
+  reopen(id: string): void {
+    if (this.hasDrafts(id)) { this.report('此服务器有未保存或待确认的文件编辑，请先在文件编辑栏处理或明确丢弃。'); return }
+    this.remove(id); if (this.current === id) this.sync()
+  }
   remove(id: string): void {
     const entry = this.entries.get(id)
     if (!entry) return

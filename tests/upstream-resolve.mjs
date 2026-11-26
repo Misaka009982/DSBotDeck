@@ -13,7 +13,7 @@ const aliases = {
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (Object.hasOwn(aliases, specifier)) return nextResolve(pathToFileURL(path.join(source, aliases[specifier])).href, context)
-    if (context.parentURL?.startsWith(pathToFileURL(source + path.sep).href) && (specifier.startsWith('@noble/') || specifier.startsWith('@lukeburns/'))) {
+    if (context.parentURL?.startsWith(pathToFileURL(source + path.sep).href) && (specifier === 'react' || specifier.startsWith('@noble/') || specifier.startsWith('@lukeburns/'))) {
       return nextResolve(specifier, { ...context, parentURL: pathToFileURL(path.join(root, 'package.json')).href })
     }
     return nextResolve(specifier, context)

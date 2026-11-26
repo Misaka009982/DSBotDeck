@@ -2,6 +2,7 @@
 // 主窗口只拿公开快照和有名操作，不能指定任意 IPC 通道。
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BackgroundCrop, ContentCommand, LocalAssetsView, LocalMark, Selection, Snapshot, ThemeMode, UiLanguage } from '../shared/domain.ts'
+import type { WindowLayoutRequest, WindowLayoutView } from '../shared/window-layout.ts'
 const subscribe = <T>(channel: string, listener: (value: T) => void): (() => void) => {
   const handler = (_event: Electron.IpcRendererEvent, value: T) => listener(value)
   ipcRenderer.on(channel, handler)
@@ -21,6 +22,8 @@ contextBridge.exposeInMainWorld('dsbotDeck', {
   chooseAsset: (kind: 'icon' | 'background' | 'pets') => invoke('choose-asset', { kind }),
   resetAsset: (kind: 'icon' | 'background' | 'pets') => invoke('reset-asset', { kind }),
   refreshAssets: () => invoke('refresh-assets'),
+  windowLayout: (request: WindowLayoutRequest | null = null) => invoke('window-layout', request),
+  onWindowLayout: (listener: (value: WindowLayoutView) => void) => subscribe('deck:window-layout', listener),
   appearance: (patch: { theme?: string; themeMode?: ThemeMode; opacity?: number; blur?: number; fit?: 'cover' | 'contain'; language?: UiLanguage; backgroundCrop?: BackgroundCrop | null }) => invoke('appearance', patch),
   pair: (uri: string, alias: string, repairId?: string) => invoke('pair', { uri, alias, repairId }),
   connect: (serverId: string) => invoke('connect', { serverId }),

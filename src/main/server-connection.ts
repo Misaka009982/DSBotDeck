@@ -36,8 +36,10 @@ export class ServerConnection {
   private pollAt: number | null = null
   private reading: { generation: number; promise: Promise<void> } | null = null
   private readAgain = false
+  private fullState = false
   private stateReads = 0
   private stateApplied = 0
+  private stateFullApplied = 0
   private readonly listeners = new Set<(entry: PeerEvent) => void>()
   constructor(config: SavedServer, factory: PeerFactory, hooks: ConnectionHooks) {
     this.config = structuredClone(config); this.factory = factory; this.hooks = hooks
@@ -73,6 +75,10 @@ export class ServerConnection {
   private current(peer: Peer, generation: number): boolean { return this.peer === peer && this.generation === generation && !this.stopped }
   private emit(event: string, data: unknown): void { for (const listener of [...this.listeners]) listener({ event, data }) }
   private reproject(): void { if (this.raw !== null) this.team = this.model.project(this.raw, this.config.unfollowed) }
+  private hasBlockedBot(id: unknown, value = this.raw): boolean {
+    if (typeof id !== 'string' || !Array.isArray(value?.bots)) return false
+    return value.bots.some(item => { const bot = record(item); return bot !== null && bot.id === id && record(bot.blocked) !== null })
+  }
   private stopTimers(): void { clearTimeout(this.retryTimer); clearTimeout(this.pollTimer); this.retryTimer = undefined; this.pollTimer = undefined; this.pollAt = null; this.retryAt = null }
   private later(): void {
     if (this.stopped || !this.config.autoConnect) return
@@ -95,6 +101,7 @@ export class ServerConnection {
     this.stopTimers(); this.stopped = false
     const old = this.peer
     this.peer = null; this.authenticated = false; this.generation += 1
+    this.fullState = true
     const generation = this.generation
     if (old) await old.close().catch(() => {})
     if (this.generation !== generation || this.stopped) return
@@ -151,7 +158,11 @@ export class ServerConnection {
   private onEvent(entry: PeerEvent, accepted = false): void {
     if (entry.event === 'notice' && this.hello) {
       if (!accepted && !this.cursor.acceptLive(this.hello.boot, entry.data)) return
-      if (this.model.notice(entry.data, this.hello.boot)) { this.reproject(); this.hooks.changed() }
+      if (this.model.notice(entry.data, this.hello.boot)) {
+        const notice = record(entry.data)
+        if (notice?.kind === 'message' && notice.roomId === undefined && notice.taskId === undefined && this.hasBlockedBot(notice.botId)) this.fullState = true
+        this.reproject(); this.hooks.changed()
+      }
     }
     this.emit(entry.event, entry.data)
     if (['revision', 'live', 'room', 'notice'].includes(entry.event)) this.schedulePoll(300)
@@ -168,8 +179,11 @@ export class ServerConnection {
     if (!peer || !this.authenticated || this.stopped) return
     if (this.reading?.generation === generation) { this.readAgain = true; return this.reading.promise }
     this.readAgain = false
+    // 重连或阻塞对象有新活动后核对真实快照，不在客户端删掉服务器阻塞。
+    const full = this.fullState; this.fullState = false
+    const since = !full && finite(this.raw?.revision) ? this.raw.revision : -1
     const stateOrder = this.stateReads + 1
-    const promise: Promise<void> = this.callPeer(peer, generation, 'state', { since: finite(this.raw?.revision) ? this.raw.revision : -1, avatars: 'ref', live: typeof this.raw?.liveKey === 'string' ? this.raw.liveKey : undefined })
+    const promise: Promise<void> = this.callPeer(peer, generation, 'state', { since, avatars: 'ref', ...(since !== -1 && typeof this.raw?.liveKey === 'string' ? { live: this.raw.liveKey } : {}) })
       .then(() => {})
       .catch(error => {
         if (!this.current(peer, generation) || stateOrder < this.stateApplied) return
@@ -180,20 +194,29 @@ export class ServerConnection {
       })
       .finally(() => {
         if (this.reading?.promise === promise) this.reading = null
-        if (this.current(peer, generation)) this.schedulePoll(this.readAgain ? 300 : 15000)
+        if (!this.current(peer, generation)) return
+        // 较新的增量回包可使旧请求失效，但只有实际应用的完整快照才能完成本次核对。
+        const missedFull = since === -1 && this.stateFullApplied < stateOrder
+        if (missedFull) this.fullState = true
+        this.schedulePoll(this.readAgain || (missedFull && stateOrder < this.stateApplied) ? 300 : 15000)
       })
     this.reading = { generation, promise }
     return promise
   }
-  applyState(value: unknown): void {
+  // 返回是否实际应用了完整快照；旧版本与增量均不能完成全量核对。
+  applyState(value: unknown, requireFull = false): boolean {
     const next = record(value)
     if (!next) throw new DeckError('bot/incompatible', '团队状态格式无效；保留缓存。')
-    if (this.raw && finite(this.raw.revision) && finite(next.revision) && next.revision < this.raw.revision) return
+    if (requireFull && next.unchanged === true) throw new DeckError('bot/incompatible', '服务器未返回完整团队状态；保留缓存。')
+    if (this.raw && finite(this.raw.revision) && finite(next.revision) && next.revision < this.raw.revision) return false
     const merged = next.unchanged === true && this.raw ? { ...this.raw, ...next } : next
     const projected = this.model.project(merged, this.config.unfollowed)
+    const verifyBlocked = next.unchanged === true && this.team?.entities.some(entity => entity.kind === 'bot' && entity.task === 'green' && this.hasBlockedBot(entity.id, merged) && projected.entities.some(current => current.key === entity.key && current.task === 'red')) === true
     const changed = this.stale || this.state !== 'ready' || this.error !== null || JSON.stringify(projected) !== JSON.stringify(this.team)
     this.raw = merged; this.team = projected; this.stale = false; this.state = 'ready'; this.error = null; this.lastSyncAt = Date.now()
+    if (verifyBlocked) { this.fullState = true; this.schedulePoll(300) }
     if (changed) this.hooks.changed()
+    return next.unchanged !== true
   }
   private async callPeer(peer: Peer, generation: number, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
     const stateOrder = endpoint === 'state' ? ++this.stateReads : 0
@@ -205,7 +228,8 @@ export class ServerConnection {
       throw new DeckError(typeof error?.code === 'string' ? error.code : 'bot/error', typeof error?.message === 'string' ? error.message.slice(0, 1000) : '服务器未完成请求。')
     }
     if (endpoint === 'state' && stateOrder >= this.stateApplied) {
-      this.applyState(value.value); this.stateApplied = stateOrder
+      if (this.applyState(value.value, record(payload)?.since === -1)) this.stateFullApplied = stateOrder
+      this.stateApplied = stateOrder
     }
     return value.value
   }

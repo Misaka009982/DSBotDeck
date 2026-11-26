@@ -10,8 +10,9 @@ function relevant(event: string, data: unknown, target: ToolRefreshTarget): bool
   if (event === 'live' || event === 'revision') return true
   const entry = record(data)
   if (!entry) return false
-  if (target.roomId !== undefined) return event === 'notice' && entry.roomId === target.roomId
+  if (target.roomId !== undefined) return (event === 'notice' || event === 'extra-update') && entry.roomId === target.roomId
   if (entry.botId !== target.botId || entry.roomId !== undefined) return false
+  if (event === 'extra-update') return entry.sessionId === target.sessionId
   if (event === 'notice') return true
   return event === 'message' && entry.sessionId === target.sessionId && record(entry.item)?.kind === 'bot'
 }

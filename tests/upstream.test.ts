@@ -12,6 +12,71 @@ import { paintSource, SCOPED_UI_FILES } from '../scripts/paint-source.mjs'
 const client = path.resolve('DSBotDeck')
 const source = path.resolve('DS-Bot')
 const systemTheme = "const dark = matchMedia('(prefers-color-scheme: dark)')\nconst paint = () => { document.body.toggleAttribute('data-ds-dark-theme', dark.matches) }\npaint()\ndark.addEventListener('change', paint)"
+test('交换记录只读接入原按钮与弹窗，缺来源、拒绝和失败不伪装正常', async () => {
+  const names = ['ds-bot/src/client/cells.js', 'ds-bot/src/client/exchange.js', 'ds-bot/src/client/team-actions.js']
+  const adapted = new Map<string, string>()
+  for (const name of names) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const next = paintSource(raw, path.join(source, name), source) ?? ''
+    adapted.set(name, next)
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+    assert.throws(() => paintSource(`${raw}\n${raw}`, path.join(source, name), source), /结构已变化/)
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  }
+  const cells = adapted.get(names[0]) ?? ''; const exchange = adapted.get(names[1]) ?? ''
+  assert.ok(cells.includes('h(PeerEvent, { key, prefix, other, selfId, sessionId, roster, actions, EventLine })'))
+  assert.ok(exchange.includes('exchangeRows(raw)')); assert.ok(exchange.includes('setFailure(exchangeFailure(error))'))
+  assert.ok(exchange.includes('if (stop) return')); assert.ok(exchange.includes('setEntries(null)'))
+  assert.ok(exchange.includes('clearTimeout(timer)')); assert.ok(exchange.includes('[pair[0], pair[1], retry]'))
+  assert.ok(exchange.includes('重新读取')); assert.ok(exchange.includes("t('No messages yet')"))
+  assert.ok(exchange.includes('actions.exchangeText(entry.id, entry.from, entry.to)'))
+  const actions = adapted.get(names[2]) ?? ''
+  assert.ok(actions.includes("exchange: (a, b) => call('exchange', { a, b }),"))
+  assert.equal(actions.includes("call('exchange', { a, b }).catch(() => [])"), false)
+  assert.equal(actions.includes("call('exchange-text', { id, ...(a !== undefined && b !== undefined ? { a, b } : {}) }).catch(() => undefined)"), false)
+  assert.equal(adaptUiSource('@dsbotdeck/chat-model', undefined, client, source), path.join(client, 'src/shared/chat-model.ts'))
+  assert.equal(adaptUiSource('@dsbotdeck/peer-event', undefined, client, source), path.join(client, 'src/remote/peer-event.js'))
+})
+test('私聊目标只适配固定Bot设置卡片和全量状态刷新，不改群目标或创建原生Goal', async () => {
+  const formName = 'ds-bot/src/client/bot-settings.js'; const teamName = 'app/ui/src/team.js'
+  const formRaw = await readFile(new URL(`../../DS-Bot/${formName}`, import.meta.url), 'utf8')
+  const form = paintSource(formRaw, path.join(source, formName), source) ?? ''
+  assert.ok(form.includes("import { PrivateGoalSettings } from '@dsbotdeck/private-goal'"))
+  assert.equal(form.split('h(PrivateGoalSettings,').length - 1, 1)
+  assert.ok(form.includes('botId: bot.id, Card'))
+  assert.ok(form.includes('h(BotCapabilitiesCard,')); assert.ok(form.includes('h(BotSchedules,'))
+  const teamRaw = await readFile(new URL(`../../DS-Bot/${teamName}`, import.meta.url), 'utf8')
+  const team = paintSource(teamRaw, path.join(source, teamName), source) ?? ''
+  assert.ok(team.includes('deckRefreshGoals: async signal'))
+  assert.ok(team.includes('await pull(true, signal)')); assert.ok(team.includes('return roster.getSnapshot()'))
+  assert.ok(team.includes('since: full ? -1 : known.revision'))
+  assert.ok(team.includes('signal?.aborted || value.unchanged'))
+  assert.ok(team.includes('!Number.isSafeInteger(value.revision)'))
+  assert.ok(team.includes('order < applied || value.revision < roster.getSnapshot().revision'))
+  assert.ok(team.includes('!full && value.revision === current.revision'))
+  assert.equal(adaptUiSource('@dsbotdeck/private-goal', undefined, client, source), path.join(client, 'src/remote/private-goal.js'))
+  for (const [name, raw] of [[formName, formRaw], [teamName, teamRaw]]) {
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), paintSource(raw, path.join(source, name), source))
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  }
+})
+test('聊天菜单只读接入原输入框，提及和动作不借DSH服务或伪造发送', async () => {
+  const name = 'app/ui/src/chat.js'; const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+  const next = paintSource(raw, path.join(source, name), source) ?? ''
+  assert.ok(next.includes("import { useComposerMenu } from '@dsbotdeck/composer-menu'"))
+  assert.ok(next.includes('const menu = useComposerMenu({ sessionId, text, setText, field, disabled, actions, useRoster, onError: setError })'))
+  assert.ok(next.includes('menu.content')); assert.ok(next.includes('...menu.inputProps'))
+  assert.ok(next.includes('if (menu.onKeyDown(event)) return'))
+  assert.ok(next.includes('if (!menu.runCommand(value)) await onSend(value)'))
+  assert.ok(next.includes('menu.isBlocked()')); assert.ok(next.includes('menu.onSelect()'))
+  assert.ok(next.includes('event.nativeEvent.isComposing')); assert.ok(next.includes('event.keyCode !== 229'))
+  assert.equal(next.includes('ctx.inputTriggers'), false); assert.equal(next.includes('ctx.commandUi'), false)
+  assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+  assert.throws(() => paintSource(raw.replace('  const inputActions = useInput(field, setText)', 'changed input'), path.join(source, name), source), /结构已变化/)
+  assert.throws(() => paintSource(raw.replace("    if (value === '' || disabled) return", 'changed submit'), path.join(source, name), source), /结构已变化/)
+  assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  assert.equal(adaptUiSource('@dsbotdeck/composer-menu', undefined, client, source), path.join(client, 'src/remote/composer-menu.js'))
+})
 test('入口只在内存中去掉原 App 挂载与强制系统明暗监听', () => {
   const original = `import { App } from './app.js'\n${systemTheme}\ncreateRoot(document.getElementById('root')).render(h(App))\ninstallStyles(text)`
   const next = bootstrapText(original)
@@ -89,6 +154,9 @@ test('原聊天与任务的呈现确认仍保留，源字符串不被修改', as
   const taskNext = paintSource(tasks, path.join(source, 'ds-bot/src/client/bot-tasks.js'), source)
   assert.ok(chatNext?.includes('team.deckPaint?.'))
   assert.ok(taskNext?.includes('actions.deckTaskPaint?.'))
+  assert.ok(taskNext?.includes("import { TaskResourceEntries } from '@dsbotdeck/resource-entry'"))
+  assert.ok(taskNext?.includes('h(TaskResourceEntries, { botId, taskId, sessionId: page?.sessionId ?? task.sessionId })'))
+  assert.equal(adaptUiSource('@dsbotdeck/resource-entry', undefined, client, source), path.join(client, 'src/remote/resource-entry.js'))
   assert.ok(!chat.includes('team.deckPaint?.')); assert.ok(!tasks.includes('actions.deckTaskPaint?.'))
 })
 test('Windows 的 CRLF 上游源码也能只读接入渲染确认', async () => {
@@ -149,13 +217,43 @@ test('主聊天与群聊读取工具步骤，聊天和任务使用同一只读�
   assert.ok(chat.includes("document.visibilityState === 'visible'")); assert.ok(chat.includes("document.body.hasAttribute('data-deck-cached')"))
   assert.ok(chat.includes("document.removeEventListener('visibilitychange', latest)"))
   const cells = adapted.get(names[1]) ?? ''
-  assert.ok(cells.includes("case 'steps': return h(ToolSteps, { key, entry: row })"))
+  assert.ok(cells.includes("case 'steps': return h(ToolSteps, { key: toolGroupKey(row, sessionId, key), entry: row"))
+  assert.ok(cells.includes('toolHistory.current.group(rows, { sessionId })'))
+  assert.ok(cells.includes('return displayRows.flatMap(')); assert.ok(cells.includes('const key = displayRows.length - index'))
   const tasks = adapted.get(names[2]) ?? ''
   assert.ok(tasks.includes('const [showSteps, setShowSteps] = useState(true)'))
-  assert.ok(tasks.includes('return h(ToolSteps, { key, entry })'))
+  assert.ok(tasks.includes('return h(ToolSteps, { key: toolGroupKey(entry, page?.sessionId, key), entry,'))
+  assert.ok(tasks.includes('toolHistory.current.group(items, { sessionId: page?.sessionId, targetId: taskId })'))
+  assert.ok(tasks.includes('displayItems.map(')); assert.ok(tasks.includes('scope: { botId, taskId, sessionId: page?.sessionId }'))
   assert.ok(tasks.includes("t('Hide steps')")); assert.ok(tasks.includes('actions.deckTaskPaint?.'))
+  assert.ok(tasks.includes('if (!showSteps || tools.length === 0) return null'))
+  assert.ok(tasks.includes('useLayoutEffect(() => {\n    setLoadingMore(false)\n    reqGenRef.current += 1'))
+  assert.ok(tasks.includes("fullMessages && errorCode(err) === 'bot/refused'"))
+  assert.ok(tasks.includes('setPage(null); setOlder([]); setOlderCursor({ active: false, cursor: null })'))
+  assert.ok(tasks.includes('setError(extraReadFailure(err))'))
+  assert.equal(tasks.split('noteReadError(err)').length - 1, 2)
   assert.equal(adaptUiSource('@dsbotdeck/tool-steps', undefined, client, source), path.join(client, 'src/remote/tool-steps.js'))
   assert.equal(adaptUiSource('@dsbotdeck/tool-refresh', undefined, client, source), path.join(client, 'src/shared/tool-refresh.ts'))
+})
+test('增补读取保留原群DTO适配和分页，拒绝不吞，完整消息变化释放原历史', async () => {
+  const names = ['app/ui/src/chat.js', 'ds-bot/src/client/team-actions.js', 'ds-bot/src/client/browser-pane.js']
+  const next = new Map<string, string>()
+  for (const name of names) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const transformed = paintSource(raw, path.join(source, name), source) ?? ''
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+    next.set(name, transformed)
+  }
+  const chat = next.get(names[0]) ?? ''; const actions = next.get(names[1]) ?? ''; const pane = next.get(names[2]) ?? ''
+  assert.ok(chat.includes("readExtraPage(call, 'extra-messages'")); assert.ok(chat.includes('fullMessages }, () => roomId !== undefined'))
+  assert.ok(chat.includes('export function adaptRoomItem(item)')); assert.ok(chat.includes('mergeLatestPage(current.items, current.cursor, mergedItems, page.cursor)'))
+  assert.ok(chat.includes('setFailure({ message: extraReadFailure(error), cursor })'))
+  assert.ok(chat.includes("fullMessages && errorCode(error) === 'bot/refused' ? { items: [], sessionId: null }"))
+  assert.ok(chat.includes('useChat(bot?.id, room?.id, sessionId, feed, extraMode.fullMessages, extraMode.state)'))
+  assert.ok(chat.includes('[active, botId, roomId, part, fullMessages, extraReads]'))
+  assert.ok(actions.includes("readExtraPage(call, 'extra-task-read'")); assert.ok(actions.includes("() => call('bot-task-read'"))
+  assert.ok(pane.includes('fullMessages: remoteReadMode(roster).fullMessages'))
+  for (const [alias, file] of [['tool-history', 'src/shared/tool-history.ts'], ['extra-read', 'src/shared/extra-read-model.ts'], ['remote-capabilities', 'src/shared/remote-capabilities.ts'], ['validation', 'src/shared/validation.ts'], ['message-note', 'src/remote/message-note.js']]) assert.equal(adaptUiSource(`@dsbotdeck/${alias}`, undefined, client, source), path.join(client, file))
 })
 test('实时工具接入普通聊天与群聊，追加输入不盖住当前服务器工具', async () => {
   for (const name of ['app/ui/src/team.js', 'ds-bot/src/client/activity-row.js']) {
@@ -168,6 +266,8 @@ test('实时工具接入普通聊天与群聊，追加输入不盖住当前服�
     if (name.endsWith('team.js')) {
       assert.ok(next.includes('workToolNote(doing)'))
       assert.ok(next.includes('workToolNote(rooms[room.id], r.byId)'))
+      assert.ok(next.includes('changed.extras = value.extras'))
+      assert.ok(next.indexOf('changed.extras = value.extras') < next.indexOf('if (value.unchanged ||'))
     } else assert.ok(next.includes('preferInputStatus(inputAt, tool)'))
     assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
   }

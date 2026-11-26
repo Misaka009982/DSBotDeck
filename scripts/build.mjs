@@ -101,6 +101,10 @@ for (const name of ['LICENSE', 'NOTICE']) {
 }
 await mkdir(path.join(dist, 'licenses/jsQR'), { recursive: true })
 await copyFile(path.join(clientRoot, 'node_modules/jsqr/LICENSE'), path.join(dist, 'licenses/jsQR/LICENSE'))
+for (const name of ['xterm', 'addon-fit']) {
+  await mkdir(path.join(dist, `licenses/xterm-${name}`), { recursive: true })
+  await copyFile(path.join(clientRoot, `node_modules/@xterm/${name}/LICENSE`), path.join(dist, `licenses/xterm-${name}/LICENSE`))
+}
 const assets = path.join(dist, 'assets')
 await mkdir(assets, { recursive: true })
 await createAppIcons(upstream.root, assets)

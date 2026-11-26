@@ -26,11 +26,60 @@ class FixtureWindow extends EventEmitter {
   setBounds(rectangle: Bounds, _animate: boolean) { this.rectangle = { ...rectangle }; this.normal = { ...rectangle }; this.restoration.push('bounds') }
   maximize() { this.normal = { ...this.rectangle }; this.maximized = true; this.rectangle = { x: 0, y: 0, width: 1920, height: 1040 }; this.restoration.push('maximize') }
 }
+function userResize(window: FixtureWindow, tracker: WindowStateTracker, rectangle: Bounds): void {
+  tracker.beginUserResize(rectangle)
+  window.rectangle = { ...rectangle }; window.normal = { ...rectangle }; window.emit('resize')
+  tracker.finishUserResize()
+}
+test('用户拖拽实时更新尺寸，停下后的程序resize与移动只记录位置', async () => {
+  const window = new FixtureWindow(); const original = { ...window.rectangle, maximized: false }
+  const saved: WindowState[] = []; const changes: number[] = []
+  const tracker: WindowStateTracker = new WindowStateTracker(window, async state => { saved.push(state) }, undefined, original, undefined, { onSize: () => { changes.push(tracker.userSizeRevision()) } })
+  try {
+    const resized = { x: 120, y: 150, width: 1280, height: 800 }
+    tracker.beginUserResize(resized)
+    assert.deepEqual(tracker.userSize(), { width: 1280, height: 800 }); assert.equal(changes.length, 1)
+    window.rectangle = resized; window.emit('resize'); tracker.finishUserResize()
+    const revision = tracker.userSizeRevision()
+    window.rectangle = { ...resized, x: 220, y: 180, width: 1282, height: 801 }
+    window.emit('resize'); window.emit('move'); await tracker.flush('before-quit')
+    assert.deepEqual(saved, [{ x: 220, y: 180, width: 1280, height: 800, maximized: false }])
+    assert.equal(tracker.userSizeRevision(), revision)
+  } finally { tracker.dispose() }
+})
+test('恢复读回尺寸更大时保留用户尺寸，普通关闭和show后事件不重写宽高', async () => {
+  const window = new FixtureWindow(); const user = { x: 100, y: 120, width: 1100, height: 720, maximized: false }
+  window.rectangle = { ...user, width: 1102, height: 721 }
+  const saved: WindowState[] = []
+  const tracker = new WindowStateTracker(window, async state => { saved.push(state) }, undefined, user)
+  try {
+    window.emit('resize'); window.emit('move'); await tracker.flush('close'); await tracker.flush('before-quit')
+    assert.deepEqual(tracker.userSize(), { width: 1100, height: 720 }); assert.deepEqual(saved, [])
+  } finally { tracker.dispose() }
+})
+test('窗口设置更新用户尺寸后，后续原生误差和退出不能覆盖这次设定', async () => {
+  const window = new FixtureWindow(); const saved: WindowState[] = []
+  const tracker = new WindowStateTracker(window, async state => { saved.push(state) })
+  try {
+    tracker.setUserBounds({ x: 400, y: 20, width: 800, height: 600 })
+    window.rectangle = { x: 400, y: 20, width: 802, height: 601 }; window.emit('resize')
+    await tracker.flush('window-layout')
+    assert.deepEqual(saved, [{ x: 400, y: 20, width: 800, height: 600, maximized: false }])
+    await tracker.flush('before-quit'); assert.equal(saved.length, 1)
+  } finally { tracker.dispose() }
+})
+test('没有保存值时使用创建默认尺寸，不把启动外框偏差作为用户设定', async () => {
+  const window = new FixtureWindow(); const saved: WindowState[] = []
+  window.rectangle = { x: 300, y: 70, width: 1282, height: 901 }
+  const tracker = new WindowStateTracker(window, async state => { saved.push(state) }, undefined, null, undefined, { initialSize: { width: 1280, height: 900 } })
+  try { await tracker.flush(); assert.deepEqual(saved, [{ x: 300, y: 70, width: 1280, height: 900, maximized: false }]) }
+  finally { tracker.dispose() }
+})
 test('移动缩放后立即最小化，延迟保存仍保留最后的有效位置大小', async () => {
   const window = new FixtureWindow(); const saved: WindowState[] = []
   const tracker = new WindowStateTracker(window, async state => { saved.push(state) })
   try {
-    window.rectangle = { x: -1400, y: 60, width: 1200, height: 800 }
+    userResize(window, tracker, { x: -1400, y: 60, width: 1200, height: 800 })
     window.emit('move'); window.emit('resize')
     window.minimized = true; window.rectangle = { x: -32000, y: -32000, width: 160, height: 28 }
     window.emit('resize')
@@ -82,7 +131,7 @@ test('贴靠保存当前矩形，不退回贴靠前的普通尺寸', async () =>
   const window = new FixtureWindow(); const saved: WindowState[] = []
   const tracker = new WindowStateTracker(window, async state => { saved.push(state) })
   try {
-    window.rectangle = { x: 960, y: 0, width: 960, height: 1040 }; window.emit('resize')
+    userResize(window, tracker, { x: 960, y: 0, width: 960, height: 1040 }); window.emit('resize')
     await tracker.flush()
     assert.deepEqual(saved[0], { ...window.rectangle, maximized: false })
   } finally { tracker.dispose() }
@@ -153,7 +202,7 @@ test('同一布局的排队刷新只保存一次，成功后才记录已保存�
   const tracker = new WindowStateTracker(window, async state => { await blocked; saved.push(state) }, undefined, initial)
   try {
     await tracker.flush(); assert.equal(saved.length, 0)
-    window.rectangle = { ...window.rectangle, width: 1200 }
+    userResize(window, tracker, { ...window.rectangle, width: 1200 })
     const first = tracker.flush(); const second = tracker.flush()
     release(); await Promise.all([first, second]); await tracker.flush()
     assert.deepEqual(saved, [{ ...window.rectangle, maximized: false }])
@@ -166,9 +215,9 @@ test('排队写入后又回到原布局，不能因旧保存值相同而漏掉�
   const blocked = new Promise<void>(resolve => { release = resolve })
   const tracker = new WindowStateTracker(window, async state => { await blocked; saved.push(state) }, undefined, initial)
   try {
-    window.rectangle = { ...original, width: 1200 }
+    userResize(window, tracker, { ...original, width: 1200 })
     const changed = { ...window.rectangle, maximized: false }; const first = tracker.flush()
-    window.rectangle = original
+    userResize(window, tracker, original)
     const second = tracker.flush()
     release(); await Promise.all([first, second]); await tracker.flush()
     assert.deepEqual(saved, [changed, initial])
@@ -188,7 +237,7 @@ test('记录resize与退出保存原因，明确区分队列写入和同布局�
   const initial = { ...window.rectangle, maximized: false }
   const tracker = new WindowStateTracker(window, async (_state, reason) => { reasons.push(reason) }, undefined, initial, entry => { reports.push(entry) })
   try {
-    window.rectangle = { ...window.rectangle, width: 1200 }; window.emit('resize')
+    userResize(window, tracker, { ...window.rectangle, width: 1200 }); window.emit('resize')
     await tracker.flush('before-quit'); await tracker.flush('close')
     assert.deepEqual(reasons, ['before-quit'])
     const written = reports.find(entry => entry.event === 'tracker-write-success')
@@ -212,13 +261,86 @@ test('排队后窗口继续变化，日志仍对应原请求的尺寸和触发�
   const blocked = new Promise<void>(resolve => { release = resolve })
   const tracker = new WindowStateTracker(window, async () => { await blocked }, undefined, null, entry => { reports.push(entry) })
   try {
-    window.rectangle = { ...window.rectangle, width: 1200 }; window.emit('resize')
+    userResize(window, tracker, { ...window.rectangle, width: 1200 }); window.emit('resize')
     const first = tracker.flush('close')
-    window.rectangle = { ...window.rectangle, width: 1300 }; window.emit('move')
+    userResize(window, tracker, { ...window.rectangle, width: 1300 }); window.emit('move')
     const second = tracker.flush('before-quit')
     release(); await Promise.all([first, second])
     const written = reports.filter(entry => entry.event === 'tracker-write-success')
     assert.deepEqual(written.map(entry => [entry.reason, entry.lastEvent, entry.captured?.width]), [['close', 'resize', 1200], ['before-quit', 'move', 1300]])
     assert.deepEqual(written.map(entry => entry.persisted?.width), [1200, 1300])
   } finally { release(); tracker.dispose() }
+})
+
+class NativeFixtureWindow extends FixtureWindow {
+  transform: (rectangle: Bounds) => Bounds
+  constructor(transform: (rectangle: Bounds) => Bounds) { super(); this.transform = transform }
+  override setBounds(rectangle: Bounds, animate: boolean) { super.setBounds(this.transform({ ...rectangle }), animate) }
+}
+test('实机日志中的坐标相关1至2DIP边框偏差，连续重开不再进入保存反馈', async () => {
+  const area = { x: 0, y: 0, width: 2752, height: 1152 }
+  for (const maximized of [false, true]) {
+    let previous: WindowState = { x: 1376, y: 0, width: 1376, height: 1152, maximized }
+    const original = { ...previous }; const saved: WindowState[] = []
+    for (let cycle = 0; cycle < 12; cycle++) {
+      // 模拟日志已证实的API非对称，不声称复制Windows内部的边框换算实现。
+      const window = new NativeFixtureWindow(rectangle => ({ ...rectangle, width: rectangle.width + (rectangle.x % 4 === 2 ? 1 : 2), height: rectangle.height + 1 }))
+      restoreWindowLayout(window, previous, area)
+      const tracker = new WindowStateTracker(window, async state => { saved.push(state); previous = state }, undefined, previous)
+      try {
+        window.emit('move'); await tracker.flush('close'); await tracker.flush('before-quit')
+        assert.deepEqual({ ...(maximized ? window.normal : window.rectangle), maximized }, original)
+        assert.deepEqual(previous, original)
+      } finally { tracker.dispose() }
+    }
+    assert.deepEqual(saved, [])
+  }
+})
+test('恢复以当前测得的坐标和边框差值校准，不固定扣两个像素', () => {
+  const area = { x: -1920, y: 0, width: 1920, height: 1040 }
+  const target = { x: -1700, y: 80, width: 720, height: 540, maximized: false }
+  for (const [x, y, width, height] of [[0, 0, 0, 0], [1, 0, 1, 1], [-1, 2, 8, 6]]) {
+    const window = new NativeFixtureWindow(rectangle => ({ x: rectangle.x + x, y: rectangle.y + y, width: rectangle.width + width, height: rectangle.height + height }))
+    restoreWindowLayout(window, target, area)
+    assert.deepEqual(window.rectangle, { x: target.x, y: target.y, width: target.width, height: target.height })
+    assert.ok(window.restoration.filter(event => event === 'bounds').length <= 5)
+  }
+})
+test('原生最小外框暂不可达到时保留最接近值，后续重开不继续增长', async () => {
+  const area = { x: 0, y: 0, width: 1920, height: 1040 }
+  let previous: WindowState = { x: 100, y: 120, width: 480, height: 320, maximized: false }
+  const saved: WindowState[] = []
+  for (let cycle = 0; cycle < 12; cycle++) {
+    const window: NativeFixtureWindow = new NativeFixtureWindow(rectangle => ({ ...rectangle, width: Math.max(window.minimum.width, rectangle.width) + 2, height: Math.max(window.minimum.height, rectangle.height) + 1 }))
+    restoreWindowLayout(window, previous, area)
+    assert.ok(window.restoration.filter(event => event === 'bounds').length <= 5)
+    const tracker = new WindowStateTracker(window, async state => { previous = state; saved.push(state) }, undefined, previous)
+    try { window.emit('move'); await tracker.flush('before-quit') }
+    finally { tracker.dispose() }
+    assert.deepEqual(window.rectangle, { x: 100, y: 120, width: 482, height: 321 })
+    assert.deepEqual(previous, { x: 100, y: 120, width: 480, height: 320, maximized: false })
+  }
+  assert.equal(saved.length, 0)
+})
+test('不可精确表示的尺寸有有限校准，等距时不选择更大的外框', () => {
+  const area = { x: 0, y: 0, width: 1920, height: 1040 }
+  const window = new NativeFixtureWindow(rectangle => ({ ...rectangle, width: Math.ceil(rectangle.width / 2) * 2 }))
+  const target = { x: 100, y: 120, width: 721, height: 540, maximized: false }
+  const reports: WindowDiagnosticRecord[] = []
+  restoreWindowLayout(window, target, area, entry => { reports.push(entry) })
+  assert.equal(window.rectangle.width, 720)
+  assert.ok(window.restoration.filter(event => event === 'bounds').length <= 5)
+  assert.ok(reports.some(entry => entry.event === 'restore-unmatched'))
+})
+test('校准请求和目标分开记录，恢复完成后才最大化且不修改原保存对象', () => {
+  const target = { x: 100, y: 120, width: 720, height: 540, maximized: true }
+  const original = { ...target }; const reports: WindowDiagnosticRecord[] = []
+  const window = new NativeFixtureWindow(rectangle => ({ ...rectangle, width: rectangle.width + 2, height: rectangle.height + 1 }))
+  restoreWindowLayout(window, target, { x: 0, y: 0, width: 1920, height: 1040 }, entry => { reports.push(entry) })
+  const correction = reports.find(entry => entry.event === 'restore-correction')
+  assert.deepEqual(correction?.target, { x: 100, y: 120, width: 720, height: 540 })
+  assert.deepEqual(correction?.requested, { x: 100, y: 120, width: 718, height: 539 })
+  assert.equal(correction?.attempt, 2)
+  assert.deepEqual(window.normal, { x: 100, y: 120, width: 720, height: 540 })
+  assert.equal(window.restoration.at(-1), 'maximize'); assert.deepEqual(target, original)
 })

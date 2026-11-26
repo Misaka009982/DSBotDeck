@@ -16,6 +16,62 @@ class BoundFixture implements RequestConnection {
   valid(token: ConnectionToken) { return token.generation === this.epoch && token.peer === this.peer }
   async call(endpoint: string, payload: unknown) { this.sent.push({ endpoint, payload }); return 'fixture-result' }
 }
+test('已确认增补只读端点保留浏览器边界和活动目标，不放行未知前缀', async () => {
+  const endpoints = ['extra-status', 'extra-messages', 'extra-task-read', 'extra-tool-list', 'extra-tool-detail', 'extra-todos',
+    'extra-delegation-list', 'extra-delegation-read', 'extra-tool-change', 'extra-workspace-open', 'extra-workspace-list', 'extra-workspace-read',
+    'extra-workspace-save-status', 'extra-workspace-change', 'extra-terminal-list', 'extra-terminal-read']
+  for (const mode of ['phone', 'browser'] as const) {
+    const connection = new BoundFixture(); connection.mode = mode
+    const gate = new RequestGate({ verify: async () => { throw new Error('只读增补不增加Windows Hello') } })
+    for (const endpoint of endpoints) {
+      assert.equal(endpointPolicy(endpoint, mode), 'safe')
+      await gate.execute(connection, endpoint, { fullMessages: false }, { active: () => true })
+      await assert.rejects(gate.execute(connection, endpoint, {}, { active: () => false }), /切换或隐藏/)
+    }
+    assert.equal(connection.sent.length, endpoints.length)
+  }
+  assert.equal(endpointPolicy('extra-unknown', 'browser'), 'denied')
+  for (const mode of ['phone', 'browser'] as const) {
+    const connection = new BoundFixture(); connection.mode = mode
+    for (const endpoint of ['extra-unknown', 'extra-goal-unknown', 'extra-workspace-delete', 'extra-workspace-force-save', 'extra-terminal-exec', 'extra-terminal-takeover']) {
+      assert.equal(endpointPolicy(endpoint, mode), 'denied')
+      await assert.rejects(new RequestGate().execute(connection, endpoint, {}, { active: () => true }))
+    }
+    assert.equal(connection.sent.length, 0)
+  }
+})
+test('增补写入只走固定端点与原上下文，发送后切换或取消表示未知结果且不重发', async () => {
+  for (const endpoint of ['extra-terminal-create', 'extra-terminal-input', 'extra-terminal-resize', 'extra-terminal-close', 'extra-workspace-save', 'extra-goal-control']) {
+    for (const mode of ['phone', 'browser'] as const) {
+      const connection = new BoundFixture(); connection.mode = mode
+      const gate = new RequestGate({ verify: async () => { throw new Error('资源写入沿用服务器设备授权') } })
+      await assert.rejects(gate.execute(connection, endpoint, {}, { active: () => false }), { code: 'bot/refused' })
+      assert.equal(connection.sent.length, 0)
+      let active = true
+      connection.call = async (name, payload) => { connection.sent.push({ endpoint: name, payload }); active = false; return 'accepted' }
+      await assert.rejects(gate.execute(connection, endpoint, { requestId: 'once' }, { active: () => active }), { code: 'bot/outcome-unknown' })
+      assert.equal(connection.sent.length, 1)
+      const controller = new AbortController()
+      connection.call = async (name, payload) => { connection.sent.push({ endpoint: name, payload }); controller.abort(); return 'accepted' }
+      await assert.rejects(gate.execute(connection, endpoint, {}, { active: () => true, signal: controller.signal }), { code: 'bot/outcome-unknown' })
+      assert.equal(connection.sent.length, 2)
+    }
+  }
+})
+test('增补正文已发出后切服再切回或取消，迟到正文也不能交付', async () => {
+  const connection = new BoundFixture(); let epoch = 1
+  const opening = epoch
+  connection.call = async (endpoint, payload) => { connection.sent.push({ endpoint, payload }); epoch += 2; return 'fictional-body' }
+  await assert.rejects(new RequestGate().execute(connection, 'extra-tool-detail', { sessionId: 'part-a', callId: 'call-a', field: 'output' }, { active: () => epoch === opening }), /切换或隐藏/)
+  assert.equal(connection.sent.length, 1)
+  for (const endpoint of ['extra-delegation-list', 'extra-delegation-read', 'extra-tool-change', 'extra-workspace-open', 'extra-workspace-list', 'extra-workspace-read']) {
+    const opening = epoch
+    await assert.rejects(new RequestGate().execute(connection, endpoint, {}, { active: () => epoch === opening }), /切换或隐藏/)
+  }
+  const controller = new AbortController()
+  connection.call = async () => { controller.abort(); return 'fictional-body' }
+  await assert.rejects(new RequestGate().execute(connection, 'extra-messages', { botId: 'bot-a' }, { active: () => true, signal: controller.signal }), /取消/)
+})
 test('默认门禁只按原配对权限发送，不依赖本机 Windows Hello', async () => {
   const connection = new BoundFixture(); const gate = new RequestGate()
   const payload = { provider: 'fixture-provider', value: 'fictional-key' }

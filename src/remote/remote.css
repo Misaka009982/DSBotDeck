@@ -15,4 +15,24 @@ body[data-deck-background] .dsb-head::before{background:none}
 /* 当前私聊审批固定在输入框上方，不混入历史消息；原卡片保留服务器公开请求说明与原按钮。 */
 .deck-chat-approvals{display:flex;flex-direction:column;gap:8px;flex:none;width:100%;max-width:min(992px,100%);max-height:min(280px,35dvh);overflow:auto;margin-bottom:8px}
 .deck-chat-approvals>.bt-mw-card{flex:none}
+/* 原输入框只增补候选层；菜单不覆盖草稿，不跨出缓存权限边界。 */
+.dsb-composer-wrap{position:relative}
+.deck-composer-menu{position:absolute;z-index:30;left:0;right:0;bottom:calc(100% + 8px);max-height:min(260px,40dvh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--bt-line);border-radius:12px;padding:5px;background:var(--bt-main);box-shadow:0 10px 30px #0003}
+.deck-composer-menu>button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:8px;padding:9px;background:none;color:var(--bt-ink);text-align:left}
+.deck-composer-menu>button[aria-selected=true]{background:var(--bt-hover)}
+.deck-composer-menu>button>svg{flex:none}
+.deck-composer-menu>button>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.deck-composer-menu strong{font-size:13px;font-weight:500;overflow-wrap:anywhere}
+.deck-composer-menu small,.deck-composer-empty{font-size:12px;color:var(--bt-ink-3);overflow-wrap:anywhere}
+.deck-composer-empty{margin:8px;line-height:1.7}
+body[data-deck-cached] .deck-composer-menu{display:none}
+/* 缺来源不渲染伪跳转；交换读取失败保留明确说明与手动重新读取。 */
+.deck-peer-note{font-size:11px;color:var(--bt-ink-3);margin-left:8px;overflow-wrap:anywhere}
+.deck-exchange-error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid var(--bt-line);border-radius:10px;padding:12px;color:var(--bt-ink-2);font-size:13px;line-height:1.6}
+/* 增补消息保持真实类型与安全文本，不落入普通互聊事件行。 */
+.deck-message-note{border:1px solid var(--bt-line);border-radius:10px;padding:9px 12px;margin:6px 0;font-size:12px;color:var(--bt-ink-2);min-width:0}
+.deck-message-note>summary{cursor:pointer;overflow-wrap:anywhere}
+.deck-message-note[data-error]{border-color:var(--bt-danger)}
+.deck-message-note pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:12px;line-height:1.7}
+.deck-chat-read-error{font-size:12px;line-height:1.7;color:var(--bt-danger);overflow-wrap:anywhere;margin:6px 0}
 @media(max-width:700px){.deck-cache-banner{padding-right:12px;padding-top:52px}}

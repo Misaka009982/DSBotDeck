@@ -16,6 +16,15 @@ src/remote/app.js 是对上游独立 UI 入口的客户端适配，增加服务�
 缓存提示和远程连接绑定；原有聊天、详情、设置、主题与素材仍来自上游。
 入口适配与 scripts/paint-source.mjs 仅在构建内存中增加非视觉的成功呈现回调，
 不保存上游修改或 UI 副本。
+src/remote/composer-menu.js 只增补独立输入框的候选层，复用上游
+mentionRows、menuIcons 和 commandEntries 的目录、原角色标记与动作；
+不启动本机 DSH，不复制技能/文件目录或开放未知远程端点。
+src/remote/tool-steps.js、tool-detail.js 与纯呈现模型独立实现气泡间分组、
+真实说明、脱敏参数/输出的有界读取；复用原任务样式、主题和代码复制，
+不复制增补工作树或不可用的 Agents 组件，不执行记录里的命令。
+src/remote/private-goal.js 独立适配已核对的私聊目标协议，在原 Bot 设置
+Card 中显示目标和控制，并给当前私聊增加状态条；目标仍由服务器执行。
+src/remote/peer-event.js 只适配服务器公开来源；原交换和详情仍由上游组件显示。
 图标与宠物的 BotMark 使用 DS-Bot 自有素材，仅说明所连接的产品。
 默认应用图标从上游 characterMarkup 的 star/aurora 原五角星渐变生成，
 本项目只在自身构建目录输出 PNG/ICO，不复制素材表或改写上游资源。
@@ -30,6 +39,15 @@ DSH Remote、React、React DOM、qrcode-generator、react-markdown、remark-gfm�
 截图二维码读取使用 jsQR（https://github.com/cozmo/jsQR），许可证 Apache-2.0；
 完整许可随安装包 dist/licenses/jsQR/LICENSE 保留。所有截图解码仅在本机完成。
 运行依赖保留自己的许可证文件。
+
+服务器用户终端渲染使用 xterm.js（https://github.com/xtermjs/xterm.js）：
+@xterm/xterm 5.5.0 和 @xterm/addon-fit 0.10.0，许可证 MIT。
+Copyright (c) 2017-2019, The xterm.js authors
+Copyright (c) 2014-2016, SourceLair Private Company
+Copyright (c) 2012-2013, Christopher Jeffrey
+addon-fit: Copyright (c) 2019, The xterm.js authors
+构建时从已安装的依赖复制完整许可证到 dist/licenses/xterm-xterm/LICENSE
+和 dist/licenses/xterm-addon-fit/LICENSE；不包含 node-pty 或本机终端执行器。
 
 DshDeck 只作为服务器树和四色状态的交互参考。
 CLI-Manager/pet-e 只作为宠物、右侧状态灯和任务面板的视觉布局参考，

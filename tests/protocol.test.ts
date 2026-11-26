@@ -7,7 +7,24 @@ import { test } from 'node:test'
 import { assetPath, clientHandler, feedResponse, staticResponse } from '../src/main/protocol.ts'
 import type { PeerEvent } from '../src/main/link-factory.ts'
 import type { ServerConnection } from '../src/main/server-connection.ts'
+import type { ReadReceipt } from '../src/main/protocol.ts'
 import { RequestGate } from '../src/main/request-gate.ts'
+
+test('增补最新聊天与后台页只记录原目标读取回执，历史、工具和坏页不记为结果已读', async () => {
+  const reads: ReadReceipt[] = []
+  let value: unknown = { items: [], cursor: null }
+  const connection = { view: () => ({ alias: '虚构服务器', mode: 'phone' }), token: () => ({ generation: 1, peer: {} }), valid: () => true, call: async () => value,
+    pendingToken: () => 'pending-a', taskKey: () => 'bot:bot-a' } as unknown as ServerConnection
+  const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), connection: () => connection, gate: new RequestGate(), active: () => true, instance: () => 'view-a', context: () => () => true, renderedTarget: () => ({ kind: 'bot', id: 'bot-a' }), read: receipt => { reads.push(receipt) } })
+  const read = async (endpoint: string, payload: unknown) => (await handler(new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint, payload }) }))).json() as Promise<{ ok: boolean }>
+  await read('extra-messages', { botId: 'bot-a' }); await read('extra-messages', { roomId: 'room-a' }); await read('extra-task-read', { botId: 'bot-a', taskId: 'task-a' })
+  assert.deepEqual(reads.map(receipt => [receipt.kind, receipt.id, receipt.taskId]), [['bot', 'bot-a', undefined], ['room', 'room-a', undefined], ['bot', 'bot-a', 'task-a']])
+  assert.equal(reads[0].pending, 'pending-a')
+  await read('extra-messages', { botId: 'bot-a', cursor: { beforeSeq: 8 } }); await read('extra-task-read', { botId: 'bot-a', taskId: 'task-a', cursor: { beforeSeq: 8 } })
+  await read('extra-tool-detail', { sessionId: 'part-a', callId: 'call-a', field: 'output' })
+  assert.equal(reads.length, 3)
+  value = {}; assert.equal((await read('extra-messages', { botId: 'bot-a' })).ok, false); assert.equal(reads.length, 3)
+})
 
 test('静态路径拒绝越界和反斜线，不读取其他服务器或任意磁盘文件', () => {
   const root = path.resolve('fixture-dist')

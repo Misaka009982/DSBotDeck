@@ -43,6 +43,19 @@ test('群聊只跟随自身 notice，原 room 推送不重复追加读取', () =
   feed.emit('notice', { roomId: 'room-a', botId: 'member-a' }); clock.flush(); assert.equal(reads, 1)
   close()
 })
+test('增补工具更新只刷新原会话或群，不把后台段和另一对象带进私聊', () => {
+  const feed = new FixtureFeed(); const clock = new FixtureClock(); let reads = 0
+  const close = watchToolSteps(feed, scope, () => { reads += 1 }, () => true, clock.schedule)
+  feed.emit('extra-update', { botId: 'bot-a', sessionId: 'old-part' })
+  feed.emit('extra-update', { botId: 'bot-a', roomId: 'room-a', sessionId: 'part-a' })
+  feed.emit('extra-update', { botId: 'bot-b', sessionId: 'part-a' }); clock.flush(); assert.equal(reads, 0)
+  feed.emit('extra-update', { botId: 'bot-a', sessionId: 'part-a' }); clock.flush(); assert.equal(reads, 1)
+  close()
+  const group = watchToolSteps(feed, { roomId: 'room-a' }, () => { reads += 1 }, () => true, clock.schedule)
+  feed.emit('extra-update', { roomId: 'room-b' }); clock.flush(); assert.equal(reads, 1)
+  feed.emit('extra-update', { roomId: 'room-a', botId: 'member-a' }); clock.flush(); assert.equal(reads, 2)
+  group()
+})
 test('隐藏、缓存或原读取上下文失效后，不执行已排队的刷新', () => {
   const feed = new FixtureFeed(); const clock = new FixtureClock(); let reads = 0; let available = true
   const close = watchToolSteps(feed, scope, () => { reads += 1 }, () => available, clock.schedule)

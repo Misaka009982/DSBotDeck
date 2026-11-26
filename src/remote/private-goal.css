@@ -1,0 +1,20 @@
+/* 私聊目标沿用原 Bot 设置卡片与主题，状态条不挤占聊天正文。 */
+.deck-goal-bar{flex:none;margin:0 14px 6px;padding:6px 10px;border:1px solid var(--bt-line);border-radius:9px;font-size:12px;color:var(--bt-ink-2);min-width:0}
+.deck-goal-bar-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.deck-goal-status{flex:none;font-weight:500;color:var(--bt-ink)}
+.deck-goal-title{flex:1;min-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck-goal-bar .bt-soft{font-size:11px}
+.deck-goal-reason{margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere;max-height:80px;overflow:auto;font-size:12px}
+.deck-goal-settings{padding:10px 12px;color:var(--bt-ink);font-size:13px;line-height:1.7}
+.deck-goal-hint,.deck-goal-feedback{font-size:12px;color:var(--bt-ink-2);overflow-wrap:anywhere}
+.deck-goal-feedback:empty{display:none}
+.deck-goal-feedback p{margin:5px 0}
+.deck-goal-current p,.deck-goal-current dd{white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}
+.deck-goal-current details{margin:8px 0}
+.deck-goal-current summary{cursor:pointer}
+.deck-goal-current dt{font-size:12px;color:var(--bt-ink-3);margin-top:8px}
+.deck-goal-current dd{margin:3px 0 8px}
+.deck-goal-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.deck-goal-confirm{padding:8px 10px;border:1px solid var(--bt-line);border-radius:8px}
+.deck-goal-confirm .bt-soft{margin-right:8px}
+@media(max-width:600px){.deck-goal-title{flex-basis:100%}.deck-goal-bar{margin-inline:8px}}

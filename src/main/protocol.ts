@@ -66,9 +66,9 @@ export interface ClientProtocol {
 function readTarget(endpoint: unknown, payload: unknown, connection: ServerConnection): Omit<ReadReceipt, 'pending' | 'token'> | null {
   const params = record(payload)
   if (!params || params.cursor !== undefined && params.cursor !== null) return null
-  if (endpoint === 'chat' && validEntityId(params.botId)) return { key: entityKey('bot', params.botId), kind: 'bot', id: params.botId }
-  if (endpoint === 'room-chat' && validEntityId(params.roomId)) return { key: entityKey('room', params.roomId), kind: 'room', id: params.roomId }
-  if (endpoint === 'bot-task-read' && validEntityId(params.botId) && validEntityId(params.taskId)) {
+  if ((endpoint === 'chat' || endpoint === 'extra-messages' && params.roomId === undefined) && validEntityId(params.botId)) return { key: entityKey('bot', params.botId), kind: 'bot', id: params.botId }
+  if ((endpoint === 'room-chat' || endpoint === 'extra-messages') && validEntityId(params.roomId)) return { key: entityKey('room', params.roomId), kind: 'room', id: params.roomId }
+  if ((endpoint === 'bot-task-read' || endpoint === 'extra-task-read') && validEntityId(params.botId) && validEntityId(params.taskId)) {
     const key = connection.taskKey(params.botId, params.taskId)
     if (key) return { key, kind: key.startsWith('room:') ? 'room' : 'bot', id: key.slice(key.startsWith('room:') ? 5 : 4), botId: params.botId, taskId: params.taskId }
   }
@@ -142,7 +142,10 @@ export function clientHandler(options: ClientProtocol): (request: Request) => Pr
       const receipt = await options.gate.execute(connection, body.endpoint, body.payload, { active, signal: request.signal })
       let value = receipt.value
       if (body.endpoint === 'folders' && record(value)) value = { ...record(value), picker: 'browse' }
-      if (target !== null && instance !== null) options.read({ ...target, pending, token: receipt.token }, instance)
+      if (target !== null && instance !== null) {
+        if (['extra-messages', 'extra-task-read'].includes(String(body.endpoint)) && !Array.isArray(record(value)?.items)) throw new DeckError('bot/incompatible', '服务器聊天或任务页格式无效。')
+        options.read({ ...target, pending, token: receipt.token }, instance)
+      }
       return json({ ok: true, value })
     } catch (error) { return json({ ok: false, error: { code: errorCode(error) || 'bot/error', message: safeMessage(error) } }) }
   }

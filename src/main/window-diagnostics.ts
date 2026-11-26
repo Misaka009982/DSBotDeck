@@ -10,7 +10,7 @@ import type { Bounds, WindowState } from '../shared/domain.ts'
 
 const REASONS = [
   'move', 'resize', 'maximize', 'unmaximize', 'restore', 'leave-full-screen', 'minimize', 'enter-full-screen',
-  'show', 'hide', 'focus', 'blur', 'ready-to-show', 'tracker-init', 'close', 'before-quit', 'flush', 'none',
+  'show', 'hide', 'focus', 'blur', 'ready-to-show', 'tracker-init', 'close', 'before-quit', 'flush', 'window-layout', 'user-resize', 'user-resize-end', 'none',
 ] as const
 const SOURCES = [
   'server-paired', 'server-pair', 'server-connect', 'server-disconnect', 'server-rename', 'server-forget',
@@ -23,7 +23,7 @@ const EVENTS = [
   'display-metrics-changed', 'display-added', 'display-removed', 'window-created', 'window-ready', 'window-show-request', 'window-show-complete',
   'window-close', 'window-closed', 'window-event', 'window-menu-before', 'window-menu-after', 'window-icon-before', 'window-icon-after',
   'window-minimum-before', 'window-minimum-after', 'window-theme-before', 'window-theme-after',
-  'restore-start', 'restore-minimum', 'restore-bounds', 'restore-maximize', 'restore-complete',
+  'restore-start', 'restore-minimum', 'restore-bounds', 'restore-correction', 'restore-unmatched', 'restore-maximize', 'restore-complete', 'window-layout-request',
   'tracker-capture', 'tracker-capture-skipped', 'tracker-write-queued', 'tracker-write-start', 'tracker-write-skipped',
   'tracker-write-success', 'tracker-write-failed', 'tracker-dispose',
 ] as const
@@ -72,6 +72,8 @@ export interface WindowDiagnosticRecord {
   windowWriteId?: number
   saved?: WindowState | null
   target?: Bounds
+  requested?: Bounds
+  attempt?: number
   captured?: WindowState | null
   persisted?: WindowState | null
   before?: WindowState | null
@@ -146,6 +148,8 @@ function diagnosticFields(entry: WindowDiagnosticRecord) {
     windowWriteId: entry.windowWriteId === undefined ? undefined : numeric(entry.windowWriteId),
     saved: entry.saved === undefined ? undefined : stateFields(entry.saved),
     target: entry.target === undefined ? undefined : rectangleFields(entry.target),
+    requested: entry.requested === undefined ? undefined : rectangleFields(entry.requested),
+    attempt: entry.attempt === undefined ? undefined : numeric(entry.attempt),
     captured: entry.captured === undefined ? undefined : stateFields(entry.captured),
     persisted: entry.persisted === undefined ? undefined : stateFields(entry.persisted),
     before: entry.before === undefined ? undefined : stateFields(entry.before),

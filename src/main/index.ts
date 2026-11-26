@@ -20,6 +20,8 @@ import { icoFile } from './icon-format.ts'
 import { minimumWindowSize, restoreWindowBounds, restoreWindowLayout, WindowStateTracker } from './window-state.ts'
 import { windowGeometry, WindowDiagnostics } from './window-diagnostics.ts'
 import type { WindowDiagnosticRecord, WindowSaveReason } from './window-diagnostics.ts'
+import { windowLayoutRequest, windowLayoutTarget } from '../shared/window-layout.ts'
+import type { WindowLayoutView } from '../shared/window-layout.ts'
 
 protocol.registerSchemesAsPrivileged([{ scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }])
 app.setName('DSBotDeck')
@@ -92,6 +94,15 @@ async function start(): Promise<void> {
   screen.on('display-added', displayListeners.added)
   screen.on('display-removed', displayListeners.removed)
   const saveWindow = async (reason: WindowSaveReason) => { await windowState?.flush(reason) }
+  const windowLayoutView = (subject: BrowserWindow): WindowLayoutView => {
+    const rectangle = subject.getBounds(); const display = screen.getDisplayMatching(rectangle)
+    const [width, height] = subject.getMinimumSize()
+    return { bounds: rectangle, userSize: windowState?.userSize() ?? { width: rectangle.width, height: rectangle.height }, sizeRevision: windowState?.userSizeRevision() ?? 0, workArea: display.workArea, minimum: { width, height }, scaleFactor: display.scaleFactor }
+  }
+  const publishWindowLayout = (subject: BrowserWindow) => {
+    if (window !== subject || !windowReady || subject.isDestroyed() || subject.webContents.isDestroyed()) return
+    subject.webContents.send('deck:window-layout', windowLayoutView(subject))
+  }
   const windowSaveFailed = (error: unknown) => {
     if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send('deck:view-error', safeMessage(error))
   }
@@ -213,15 +224,21 @@ async function start(): Promise<void> {
     created.webContents.on('will-navigate', (event, url) => { if (url !== `${SCHEME}://shell/index.html`) event.preventDefault() })
     created.webContents.on('will-attach-webview', event => event.preventDefault())
     created.on('move', () => {
-      if (created.isMinimized() || created.isFullScreen()) return
-      const next = minimumWindowSize(screen.getDisplayMatching(created.getBounds()).workArea)
+      if (created.isMinimized() || created.isFullScreen() || created.isMaximized()) return
+      const current = created.getBounds()
+      const target = minimumWindowSize(screen.getDisplayMatching(current).workArea)
+      // 更新约束不能在用户停下后把现有外框主动撑大。
+      const next = { width: Math.min(target.width, current.width), height: Math.min(target.height, current.height) }
       const [width, height] = created.getMinimumSize()
       if (width !== next.width || height !== next.height) {
         report({ event: 'window-minimum-before', minimum: next })
         created.setMinimumSize(next.width, next.height)
         report({ event: 'window-minimum-after', minimum: next })
       }
+      publishWindowLayout(created)
     })
+    created.on('will-resize', (_event, rectangle) => { if (!quitting && window === created && windowReady) windowState?.beginUserResize(rectangle) })
+    created.on('resized', () => { if (!quitting && window === created && windowReady) windowState?.finishUserResize() })
     created.on('show', () => views?.sync())
     created.on('close', event => { report({ event: 'window-close', reason: 'close' }); if (!quitting) { event.preventDefault(); void saveWindow('close').catch(windowSaveFailed); created.hide() } })
     created.on('closed', () => { report({ event: 'window-closed' }); windowState?.dispose(); windowState = null; windowReady = false; views?.close(); views = null; window = null })
@@ -231,7 +248,7 @@ async function start(): Promise<void> {
       const restoredArea = screen.getDisplayMatching(saved ?? created.getBounds()).workArea
       restoreWindowLayout(created, saved, restoredArea, report)
       // 恢复后才记录；启动期间的默认矩形和程序性移动不覆盖旧保存值。
-      windowState = new WindowStateTracker(created, async (state, reason) => { if (!startupError) await manager.saveWindow(state, reason) }, windowSaveFailed, saved, report)
+      windowState = new WindowStateTracker(created, async (state, reason) => { if (!startupError) await manager.saveWindow(state, reason) }, windowSaveFailed, saved, report, { initialSize: restoreWindowBounds(null, restoredArea), onSize: () => publishWindowLayout(created) })
       windowReady = true
       created.show(); views?.sync()
       report({ event: 'window-show-complete' })
@@ -258,14 +275,37 @@ async function start(): Promise<void> {
     const data = record(packet); const args = record(data?.args) ?? {}
     const id = typeof args.serverId === 'string' ? args.serverId : ''
     switch (data?.action) {
-      case 'pair': return manager.pair(args.uri, args.alias, args.repairId)
+      case 'pair':
+        if (typeof args.repairId === 'string' && views?.hasDrafts(args.repairId)) throw new DeckError('bot/refused', '重新配对前请先处理或丢弃该服务器的未保存文件编辑。')
+        return manager.pair(args.uri, args.alias, args.repairId)
       case 'connect': return manager.connect(id)
       case 'disconnect': return manager.disconnect(id)
       case 'rename': return manager.rename(id, args.alias)
-      case 'forget': await manager.forget(id); views?.remove(id); return null
+      case 'forget':
+        if (views?.hasDrafts(id)) throw new DeckError('bot/refused', '移除服务器前请先处理或丢弃其未保存文件编辑。')
+        await manager.forget(id); views?.remove(id); return null
       case 'select': return manager.select(data.args)
       case 'navigate': return manager.navigate(id, args.command)
       case 'follow': return manager.follow(id, args.key, args.followed)
+      case 'window-layout': return localAction(async (): Promise<WindowLayoutView> => {
+        if (!owns(event)) throw new DeckError('bot/refused', '窗口请求已过期。')
+        const request = windowLayoutRequest(data?.args)
+        const subject = window
+        if (!subject || !windowReady || subject.isDestroyed()) throw new DeckError('bot/refused', '窗口尚未就绪。')
+        const current = subject.getBounds(); const display = screen.getDisplayMatching(current)
+        if (request) {
+          if (startupError) throw new DeckError('vault/unavailable', startupError)
+          if (subject.isFullScreen()) throw new DeckError('bot/refused', '请先退出全屏，再调整窗口布局。')
+          const target = windowLayoutTarget(request, current, display.workArea)
+          traceWindow({ event: 'window-layout-request', reason: 'window-layout', target }, subject)
+          if (subject.isMaximized()) subject.unmaximize()
+          restoreWindowLayout(subject, { ...target, maximized: false }, display.workArea, entry => traceWindow(entry, subject))
+          windowState?.setUserBounds(restoreWindowBounds(target, display.workArea))
+          await saveWindow('window-layout')
+          if (!owns(event) || window !== subject || subject.isDestroyed()) throw new DeckError('bot/refused', '窗口已关闭，未返回旧布局。')
+        }
+        return windowLayoutView(subject)
+      })
       case 'pet': return localAction(async () => {
         const patch = petPatch(data.args)
         if (patch.skin && !assets.view('shell').pets.some(entry => entry.key === patch.skin && entry.available)) throw new DeckError('asset/invalid', '所选宠物不在可用合集中，请先刷新目录。')
@@ -318,6 +358,7 @@ async function start(): Promise<void> {
       traceWindow({ event: 'window-theme-after', overlayHeight: 48 })
     }
   })
+  ipcMain.on('deck:content-drafts', (event, value: unknown) => views?.drafts(event, value))
   ipcMain.on('deck:content-ready', event => views?.ready(event))
   ipcMain.on('deck:content-selected', (event, value: unknown) => views?.selected(event, value))
   ipcMain.on('deck:content-viewed', (event, value: unknown) => views?.viewed(event, value))
@@ -359,6 +400,9 @@ async function start(): Promise<void> {
     if (stopped) return
     event.preventDefault()
     if (quitting) return
+    if (views?.hasDrafts() && dialog.showMessageBoxSync({ type: 'warning', title: '仍有文件编辑未处理',
+      message: '未保存的编辑只保留在内存，退出会丢失；待确认的服务器保存不会因退出而撤销。',
+      buttons: ['返回处理', '放弃本地内容并退出'], defaultId: 0, cancelId: 0, noLink: true }) !== 1) return
     quitting = true
     traceWindow({ event: 'window-close', reason: 'before-quit' })
     const saving = saveWindow('before-quit'); windowState?.dispose()

@@ -101,9 +101,9 @@ export class TaskModel {
         const busy = kind === 'room' ? list(groups[id]).length > 0
           : botDoing !== null || Object.values(groups).some(group => list(group).some(entry => entry.botId === id)) || tasks.some(task => task.running === true || task.status === 'running' || task.status === 'waiting_work')
         const wait = pendingApproval || ask || card || taskApproval || item.waiting === true
-        const color = wait ? 'yellow' : blocked || failed ? 'red' : busy ? 'green' : this.pending.has(key) ? 'blue' : null
-        const detail = wait ? '等待你的交互' : blocked ? '模型或凭据明确阻塞' : failed ? text(failed.error || failed.summary, 160) || '后台任务明确失败'
-          : busy ? '远程工作进行中' : color === 'blue' ? '新结果待查看' : '没有待关注任务'
+        const color = wait ? 'yellow' : busy ? 'green' : blocked || failed ? 'red' : this.pending.has(key) ? 'blue' : null
+        const detail = wait ? '等待你的交互' : busy ? '远程工作进行中' : blocked ? '模型或凭据明确阻塞' : failed ? text(failed.error || failed.summary, 160) || '后台任务明确失败'
+          : color === 'blue' ? '新结果待查看' : '没有待关注任务'
         entities.push({
           key, id, kind, name: text(item.name, 160) || (kind === 'bot' ? 'Bot' : '群聊'), sessionId: part,
           sectionId: validEntityId(item.sectionId) ? item.sectionId : null,
