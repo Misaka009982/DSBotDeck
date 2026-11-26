@@ -2,7 +2,7 @@
 // 不修改上游文件；构建内存中增加结果呈现回调、只读工具摘要，并隐藏不需要的控制入口。
 import path from 'node:path'
 const slash = value => value.replaceAll('\\', '/')
-const TOOL_STEPS_IMPORT = "import { ToolSteps } from '@dsbotdeck/tool-steps'\nimport { ToolHistoryModel, toolGroupKey } from '@dsbotdeck/tool-history'\nimport { MessageNote } from '@dsbotdeck/message-note'\n"
+const TOOL_STEPS_IMPORT = "import { ToolSteps } from '@dsbotdeck/tool-steps'\nimport { ToolHistoryModel, toolGroupKey } from '@dsbotdeck/tool-history'\nimport { DiagnosticHistoryModel, MessageNote } from '@dsbotdeck/message-note'\nimport { groupInternalMessages } from '@dsbotdeck/chat-model'\n"
 /** @type {Map<string, [string, string][]>} */
 const SCOPE_EDITS = new Map([
   ['ds-bot/src/client/settings.js', [
@@ -14,6 +14,10 @@ const SCOPE_EDITS = new Map([
     ["import { t } from './i18n.js'", "import { t } from './i18n.js'\nimport { PrivateGoalSettings } from '@dsbotdeck/private-goal'"],
     ['    h(BotComputerCard, { bot, roster, actions, run, Card, Row }),\n', ''],
     ["    h(Card, { title: t('Profile') },", "    h(PrivateGoalSettings, { key: bot.id, botId: bot.id, Card }),\n    h(Card, { title: t('Profile') },"],
+  ]],
+  ['ds-bot/src/client/header.js', [
+    ["import { t } from './i18n.js'", "import { t } from './i18n.js'\nimport { HeaderActions } from '@dsbotdeck/header-actions'"],
+    ["  const pill = h('button', {", "  const pill = h(HeaderActions, {\n    botId: !away ? bot?.id : undefined, name, openSettings: actions.openSettings,"],
   ]],
   ['ds-bot/src/client/details-drawer.js', [
     ["    ...(bot ? ['browser'] : []),\n    ...(bot && roster.computer?.enabled === true ? ['computer'] : []),\n", ''],
@@ -103,9 +107,10 @@ export function paintSource(source, id, root) {
     return "import { preferInputStatus } from '@dsbotdeck/tool-model'\n" + source
   }
   if (name === 'ds-bot/src/client/cells.js') {
+    source = replaceOnce(source, 'function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {', 'export function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {')
     const anchor = "    case 'divider': return h(PartLine, { key, time: row.time })"
-    source = replaceOnce(source, anchor, `    case 'steps': return h(ToolSteps, { key: toolGroupKey(row, sessionId, key), entry: row, scope: { sessionId, roomId: roster.roomsById[sessionId]?.id }, fullMessages: remoteReadMode(roster).fullMessages })\n    case 'internal':\n    case 'diagnostic': return h(MessageNote, { key, item: row })\n${anchor}`)
-    source = replaceOnce(source, '  let before\n  return rows.flatMap((row, index) => {', '  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()\n  const displayRows = toolHistory.current.group(rows, { sessionId })\n  let before\n  return displayRows.flatMap((row, index) => {')
+    source = replaceOnce(source, anchor, `    case 'steps': return h(ToolSteps, { key: toolGroupKey(row, sessionId, key), entry: row, scope: { sessionId, roomId: roster.roomsById[sessionId]?.id }, fullMessages: remoteReadMode(roster).fullMessages })\n    case 'internal': return h(MessageNote, { key, item: row, EventLine })\n    case 'diagnostic': return h(MessageNote, { key: row.deckDiagnosticGroupKey ?? key, item: row })\n${anchor}`)
+    source = replaceOnce(source, '  let before\n  return rows.flatMap((row, index) => {', '  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()\n  const diagnosticHistory = useRef(null)\n  if (diagnosticHistory.current === null) diagnosticHistory.current = new DiagnosticHistoryModel()\n  const displayRows = diagnosticHistory.current.group(groupInternalMessages(toolHistory.current.group(rows, { sessionId }), roster.byId, remoteReadMode(roster).fullMessages), { sessionId, fullMessages: remoteReadMode(roster).fullMessages })\n  let before\n  return displayRows.flatMap((row, index) => {')
     source = replaceOnce(source, '    const key = rows.length - index', '    const key = displayRows.length - index')
     source = replaceOnce(source,
       '      return h(EventLine, { key, prefix, bots: [other], onOpen: () => { if (selfId && other.id) actions.openExchange(selfId, other.id) }, whole: true })',
@@ -153,10 +158,11 @@ export function paintSource(source, id, root) {
     return "import { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
+    source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")
     source = replaceOnce(source, 'useMemo, useRef, useState', 'useMemo, useRef, useState, useLayoutEffect')
     source = replaceOnce(source, 'const [showSteps, setShowSteps] = useState(false)', 'const [showSteps, setShowSteps] = useState(true)')
     source = replaceOnce(source, 'export function TaskReaderView({ bot, task, actions }) {', 'export function TaskReaderView({ bot, task, actions, fullMessages = false }) {')
-    source = replaceOnce(source, '  const scrollRef = useRef(null)', '  const scrollRef = useRef(null)\n  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()')
+    source = replaceOnce(source, '  const scrollRef = useRef(null)', '  const scrollRef = useRef(null)\n  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()\n  const diagnosticHistory = useRef(null)\n  if (diagnosticHistory.current === null) diagnosticHistory.current = new DiagnosticHistoryModel()')
     source = replaceOnce(source, '  }, [botId, taskId, showSteps])', '  }, [botId, taskId, showSteps, fullMessages])')
     source = replaceOnce(source, '  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current) => {', `  const noteReadError = err => {
     if (fullMessages && errorCode(err) === 'bot/refused') {
@@ -172,11 +178,11 @@ export function paintSource(source, id, root) {
       "      setError(hostText(err?.message ?? String(err)))\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)",
       "      noteReadError(err)\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)")
     source = replaceOnce(source, '  useEffect(() => {\n    reqGenRef.current += 1', '  // 权限或目标变化在绘制前清旧页，迟到回包沿用原代次检查。\n  useLayoutEffect(() => {\n    setLoadingMore(false)\n    reqGenRef.current += 1')
-    source = replaceOnce(source, '  const items = [...uniqueOlder, ...latestItems]', '  const items = [...uniqueOlder, ...latestItems]\n  const displayItems = toolHistory.current.group(items, { sessionId: page?.sessionId, targetId: taskId })')
+    source = replaceOnce(source, '  const items = [...uniqueOlder, ...latestItems]', '  const items = [...uniqueOlder, ...latestItems]\n  const displayItems = diagnosticHistory.current.group(toolHistory.current.group(items, { sessionId: page?.sessionId, targetId: taskId }), { sessionId: page?.sessionId, targetId: JSON.stringify([botId, taskId]), fullMessages })')
     source = replaceOnce(source, ': items.map((entry, idx) => {', ': displayItems.map((entry, idx) => {')
     const toolRows = "                return h('div', { key, className: 'bt-tread-steps' },\n                  tools.map((tool, sIdx) => h('div', { key: sIdx, className: 'bt-tread-step', 'data-ok': tool.ok === false ? 'false' : undefined },\n                    h('span', { className: 'bt-tread-step-dot', 'aria-hidden': true }),\n                    h('span', { className: 'bt-tread-step-name' }, tool.label || tool.name || 'tool'))))"
     source = replaceOnce(source, toolRows, '                return h(ToolSteps, { key: toolGroupKey(entry, page?.sessionId, key), entry, scope: { botId, taskId, sessionId: page?.sessionId }, fullMessages })')
-    source = replaceOnce(source, "              if (entry.kind === 'steps') {", "              if (entry.kind === 'internal' || entry.kind === 'diagnostic') return h(MessageNote, { key, item: entry })\n              if (entry.kind === 'steps') {")
+    source = replaceOnce(source, "              if (entry.kind === 'steps') {", "              if (entry.kind === 'internal' || entry.kind === 'diagnostic') return h(MessageNote, { key: entry.deckDiagnosticGroupKey ?? key, item: entry, EventLine })\n              if (entry.kind === 'steps') {")
     const anchor = '  const nextCursor = olderCursor.active ? olderCursor.cursor : (page?.cursor ?? null)\n'
     source = replaceOnce(source, anchor, `${anchor}\n  const deckNoteTaskSeen = () => {\n    if (!loading && !error && page !== null) actions.deckTaskPaint?.(botId, taskId, scrollRef.current)\n  }\n  useLayoutEffect(deckNoteTaskSeen, [page, loading, error, botId, taskId])\n`)
     source = replaceOnce(source, "h('div', { className: 'bt-tread-scroll', ref: scrollRef },", "h('div', { className: 'bt-tread-scroll', ref: scrollRef, onScroll: deckNoteTaskSeen },")

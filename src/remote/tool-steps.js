@@ -32,7 +32,7 @@ function ToolCall({ tool, index, scope, fullMessages, available, allowed, onDeni
     setOpen(event.currentTarget.open)
     if (!event.currentTarget.open) setChangeOpen(false)
   } },
-    h('summary', { className: 'bt-tread-step deck-tool-call-heading', title: `${tool.name ?? '工具名未提供'} · ${outcome.text}` },
+    h('summary', { className: 'bt-tread-step deck-tool-call-heading', title: `${view.title} · ${tool.name ?? '工具名未提供'} · ${outcome.text}` },
       h('span', { className: 'deck-tool-chevron', 'aria-hidden': true }, '›'),
       h('span', { className: 'bt-tread-step-name' }, h('strong', { className: 'deck-tool-description' }, view.title)),
       status !== 'success' ? h('span', { className: 'deck-tool-outcome', title: outcome.hint }, outcome.text) : null),

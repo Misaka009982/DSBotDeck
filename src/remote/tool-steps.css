@@ -20,7 +20,8 @@
 .deck-tool-steps .bt-tread-step[data-outcome=failure] .deck-tool-outcome{color:var(--bt-danger)}
 .deck-tool-call{margin:2px 0;min-width:0}
 .deck-tool-call[open]>.deck-tool-call-heading .deck-tool-chevron{transform:rotate(90deg)}
-.deck-tool-call-heading{cursor:pointer;list-style:none}
+.deck-tool-steps .deck-tool-call-heading{display:flex;flex-flow:row nowrap;align-items:center;cursor:pointer;list-style:none;min-width:0}
+.deck-tool-steps .deck-tool-call-heading>.bt-tread-step-name{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .deck-tool-call-heading::-webkit-details-marker{display:none}
 .deck-tool-call-heading:hover{background:var(--bt-hover)}
 .deck-tool-call-heading:focus-visible,.deck-tool-output>summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}

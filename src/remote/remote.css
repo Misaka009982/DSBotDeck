@@ -33,6 +33,22 @@ body[data-deck-cached] .deck-composer-menu{display:none}
 .deck-message-note{border:1px solid var(--bt-line);border-radius:10px;padding:9px 12px;margin:6px 0;font-size:12px;color:var(--bt-ink-2);min-width:0}
 .deck-message-note>summary{cursor:pointer;overflow-wrap:anywhere}
 .deck-message-note[data-error]{border-color:var(--bt-danger)}
-.deck-message-note pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:12px;line-height:1.7}
+.deck-message-note pre,.deck-internal-note pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;font-size:12px;line-height:1.7}
+.deck-internal-note{font-size:12px;color:var(--bt-ink-3);margin:6px 0;min-width:0}
+.deck-internal-note>summary{cursor:pointer;overflow-wrap:anywhere}
+.deck-diagnostic-list{max-height:min(50dvh,420px);overflow:auto;overscroll-behavior:contain;margin:10px 0 0;padding:0 8px 0 24px}
+.deck-diagnostic-list>li{padding:8px 0;overflow-wrap:anywhere}
+.deck-diagnostic-list>li+li{border-top:1px solid var(--bt-line)}
+.deck-diagnostic-list strong{font-size:12px;font-weight:500}
 .deck-chat-read-error{font-size:12px;line-height:1.7;color:var(--bt-danger);overflow-wrap:anywhere;margin:6px 0}
+/* 顶部名称直达 Bot 设置；头像与尾部保持原详情／记忆动作，使用并列原生按钮。 */
+.deck-header-pill>button{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0;border:0;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer;min-width:0}
+.deck-header-pill>.deck-header-name{flex:0 1 auto;overflow:hidden}
+.deck-header-pill>.deck-header-avatar,.deck-header-pill>.deck-header-tail{flex:none}
+.deck-header-pill>button:focus-visible{outline:2px solid var(--bt-accent);outline-offset:3px}
+.deck-header-pill .bt-pill-go{width:18px;margin-left:0;opacity:1;filter:none;transform:none}
+.deck-header-pill[data-details] .bt-pill-go svg{transform:rotate(180deg)}
+.deck-header-pill:not([data-memory=updated]) .bt-pill-mem{display:none}
+.deck-header-pill .bt-pill-mem{margin-left:0}
+.deck-header-pill[data-memory=updated] .bt-pill-go{display:none}
 @media(max-width:700px){.deck-cache-banner{padding-right:12px;padding-top:52px}}

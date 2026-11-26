@@ -2,7 +2,7 @@
 // 交换记录的目标与错误回归；不读取真实服务器或运行界面。
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { botExchangePair, messageExchange, exchangeFailure, exchangeRows } from '../src/shared/chat-model.ts'
+import { botExchangePair, messageExchange, internalEntries, groupInternalMessages, exchangeFailure, exchangeRows } from '../src/shared/chat-model.ts'
 const directory = () => ({ 'bot-a': { id: 'bot-a', name: '相同名称' }, 'part-a': { id: 'bot-a' }, 'bot-b': { id: 'bot-b', name: '相同名称' }, 'part-b': { id: 'bot-b' } })
 
 test('Bot交换按当前目录的稳定编号与分段别名定位，不按同名匹配', () => {
@@ -26,6 +26,29 @@ test('内部协作只打开服务端验证过的原交换，旧会话归属与�
   assert.equal(messageExchange({ ...item, sessionId: 'part-a' }, directory()), null)
   assert.equal(messageExchange({ ...item, exchange: { ...item.exchange, from: 'part-a' } }, directory()), null)
   assert.equal(messageExchange(item, { ...directory(), 'bot-a': { id: 'bot-a', private: true } }), null)
+})
+test('同会话连续协作按已核实来源统计原消息，重复页不重复计数', () => {
+  const message = (seq: number) => ({ kind: 'internal', sessionId: 'part-b', seq, text: `消息 ${seq}`, time: seq, exchange: { schema: 1, id: `exchange-${seq}`, from: 'bot-a', to: 'bot-b' } })
+  const first = message(1); const second = message(2)
+  const items = [first, second, { ...second, text: '当前可见正文' }]
+  const before = structuredClone(items)
+  const rows = groupInternalMessages(items, directory(), true)
+  assert.equal(rows.length, 1); assert.equal(internalEntries(rows[0]).length, 2)
+  assert.deepEqual(internalEntries(rows[0]).map(item => item.text), ['消息 1', '当前可见正文'])
+  assert.deepEqual(messageExchange(rows[0], directory()), ['bot-a', 'bot-b'])
+  assert.deepEqual(items, before)
+  assert.deepEqual(groupInternalMessages(rows, directory(), true), rows)
+})
+test('协作分组不跨回复、来源或会话，缺授权和稳定来源不冒充已核实互聊', () => {
+  const first = { kind: 'internal', sessionId: 'part-b', seq: 1, exchange: { schema: 1, id: 'exchange-a', from: 'bot-a', to: 'bot-b' } }
+  const second = { ...first, seq: 2 }
+  for (const middle of [{ kind: 'bot', text: '公开回复' }, { ...first, exchange: undefined }, { ...first, sessionId: 'unknown-part' }]) {
+    const rows = groupInternalMessages([first, middle, second], directory(), true)
+    assert.equal(rows.length, 3); assert.equal(rows[1], middle)
+  }
+  assert.deepEqual(groupInternalMessages([first, second], directory(), false), [first, second])
+  assert.deepEqual(groupInternalMessages([first, second], { ...directory(), 'bot-a': { id: 'bot-a', private: true } }, true), [first, second])
+  assert.equal(internalEntries({ kind: 'diagnostic' }).length, 0)
 })
 test('权限拒绝与缓存有明确说明，不回显服务端错误正文或伪装空记录', () => {
   const denied = exchangeFailure({ code: 'bot/refused', message: 'fictional-secret' })

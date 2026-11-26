@@ -60,6 +60,18 @@ test('私聊目标只适配固定Bot设置卡片和全量状态刷新，不改�
     assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
   }
 })
+test('顶部Bot名称接设置按钮，原头像详情和群目标仍保留上游动作', async () => {
+  const name = 'ds-bot/src/client/header.js'
+  const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+  const next = paintSource(raw, path.join(source, name), source) ?? ''
+  assert.ok(next.includes("import { HeaderActions } from '@dsbotdeck/header-actions'"))
+  assert.ok(next.includes('botId: !away ? bot?.id : undefined, name, openSettings: actions.openSettings'))
+  assert.ok(next.includes('actions.toggleDetails(sessionId)')); assert.ok(next.includes('actions.openMemory(changed)'))
+  assert.ok(next.includes('h(GoalIsland,')); assert.ok(next.includes('h(BotAvatar,'))
+  assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+  assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  assert.equal(adaptUiSource('@dsbotdeck/header-actions', undefined, client, source), path.join(client, 'src/remote/header-actions.js'))
+})
 test('聊天菜单只读接入原输入框，提及和动作不借DSH服务或伪造发送', async () => {
   const name = 'app/ui/src/chat.js'; const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
   const next = paintSource(raw, path.join(source, name), source) ?? ''
@@ -219,11 +231,21 @@ test('主聊天与群聊读取工具步骤，聊天和任务使用同一只读�
   const cells = adapted.get(names[1]) ?? ''
   assert.ok(cells.includes("case 'steps': return h(ToolSteps, { key: toolGroupKey(row, sessionId, key), entry: row"))
   assert.ok(cells.includes('toolHistory.current.group(rows, { sessionId })'))
+  assert.ok(cells.includes('diagnosticHistory.current.group(groupInternalMessages(toolHistory.current.group(rows,'))
+  assert.ok(cells.includes('roster.byId, remoteReadMode(roster).fullMessages)'))
+  assert.ok(cells.includes('export function EventLine('))
+  assert.ok(cells.includes('item: row, EventLine'))
+  assert.ok(cells.includes('{ sessionId, fullMessages: remoteReadMode(roster).fullMessages }'))
+  assert.ok(cells.includes('key: row.deckDiagnosticGroupKey ?? key, item: row'))
   assert.ok(cells.includes('return displayRows.flatMap(')); assert.ok(cells.includes('const key = displayRows.length - index'))
   const tasks = adapted.get(names[2]) ?? ''
   assert.ok(tasks.includes('const [showSteps, setShowSteps] = useState(true)'))
   assert.ok(tasks.includes('return h(ToolSteps, { key: toolGroupKey(entry, page?.sessionId, key), entry,'))
   assert.ok(tasks.includes('toolHistory.current.group(items, { sessionId: page?.sessionId, targetId: taskId })'))
+  assert.ok(tasks.includes('diagnosticHistory.current.group(toolHistory.current.group(items,'))
+  assert.ok(tasks.includes('targetId: JSON.stringify([botId, taskId]), fullMessages'))
+  assert.ok(tasks.includes('key: entry.deckDiagnosticGroupKey ?? key, item: entry'))
+  for (const code of [cells, tasks]) assert.ok(code.includes("import { DiagnosticHistoryModel, MessageNote } from '@dsbotdeck/message-note'"))
   assert.ok(tasks.includes('displayItems.map(')); assert.ok(tasks.includes('scope: { botId, taskId, sessionId: page?.sessionId }'))
   assert.ok(tasks.includes("t('Hide steps')")); assert.ok(tasks.includes('actions.deckTaskPaint?.'))
   assert.ok(tasks.includes('if (!showSteps || tools.length === 0) return null'))

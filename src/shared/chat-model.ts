@@ -20,6 +20,37 @@ export function messageExchange(value: unknown, directory: unknown): [string, st
   if (sender?.id !== exchange.from || receiver?.id !== exchange.to || owner?.id !== exchange.to || sender.private === true || receiver.private === true) return null
   return botExchangePair(exchange.from, exchange.to, directory)
 }
+export function internalEntries(value: unknown): Record<string, unknown>[] {
+  const entry = record(value)
+  if (entry?.kind !== 'internal') return []
+  return Array.isArray(entry.deckInternalEntries) ? entry.deckInternalEntries.map(record).filter((row): row is Record<string, unknown> => row?.kind === 'internal') : [entry]
+}
+export function groupInternalMessages(items: readonly unknown[], directory: unknown, fullMessages = false): unknown[] {
+  if (!fullMessages) return [...items]
+  const rows: unknown[] = []; let pending: Record<string, unknown>[] = []; let owner = ''
+  const flush = () => {
+    if (pending.length > 0) {
+      const entries: Record<string, unknown>[] = []; const seen = new Map<number, number>()
+      for (const entry of pending) {
+        const seq = typeof entry.seq === 'number' && Number.isSafeInteger(entry.seq) && entry.seq >= 0 ? entry.seq : null
+        const index = seq === null ? undefined : seen.get(seq)
+        if (index === undefined) { if (seq !== null) seen.set(seq, entries.length); entries.push(entry) }
+        else entries[index] = entry
+      }
+      const last = entries.at(-1)!
+      rows.push({ ...entries[0], deckInternalEntries: entries, ...(typeof last.time === 'number' ? { end: last.time } : {}) })
+    }
+    pending = []; owner = ''
+  }
+  for (const value of items) {
+    const entry = record(value); const pair = messageExchange(entry, directory)
+    if (!entry || !pair || Array.isArray(entry.deckInternalEntries)) { flush(); rows.push(value); continue }
+    const next = JSON.stringify([entry.sessionId, ...pair, entry.role === 'stopped' ? 'stopped' : 'messages'])
+    if (pending.length > 0 && next !== owner) flush()
+    owner = next; pending.push(entry)
+  }
+  flush(); return rows
+}
 export function exchangeFailure(value: unknown): string {
   switch (errorCode(value)) {
     case 'bot/refused': return '服务器拒绝读取 Bot 交换记录，请检查当前配对设备的完整消息授权。'
