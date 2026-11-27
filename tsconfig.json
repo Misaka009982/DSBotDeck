@@ -19,6 +19,7 @@
       "@dsbot/characters": ["../DS-Bot/ds-bot/src/client/characters.js"],
       "@dsbot/themes": ["../DS-Bot/ds-bot/src/client/themes.js"],
       "@dsbot/browser-policy": ["../DS-Bot/ds-bot/src/shared/browser-endpoints.js"],
+      "@dsbot/remote-policy": ["../DS-Bot/ds-bot/src/shared/remote-endpoints.js"],
       "@noble/curves/ed25519": ["./node_modules/@noble/curves/ed25519.d.ts"],
       "@noble/hashes/sha256": ["./node_modules/@noble/hashes/sha256.d.ts"],
       "@noble/ciphers/webcrypto": ["./node_modules/@noble/ciphers/webcrypto.d.ts"],

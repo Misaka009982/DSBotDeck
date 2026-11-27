@@ -7,6 +7,7 @@ export interface UnlockRequest { serverAlias: string; endpoint: string; allowed?
 export interface UnlockProvider { verify(request: UnlockRequest): Promise<boolean> }
 export interface RequestConnection {
   view(): Pick<ServerView, 'alias' | 'mode'>
+  learningApproval?(): boolean
   token(): ConnectionToken | null
   valid(token: ConnectionToken, requireFresh?: boolean): boolean
   call(endpoint: string, payload: unknown, signal?: AbortSignal, token?: ConnectionToken | null): Promise<unknown>
@@ -20,8 +21,9 @@ export class RequestGate {
   async execute(connection: RequestConnection, endpoint: unknown, payload: unknown, context: RequestContext): Promise<RequestReceipt> {
     const request = frozenRequest(endpoint, payload)
     const server = connection.view()
-    const policy = endpointPolicy(request.endpoint, server.mode)
+    const policy = endpointPolicy(request.endpoint, server.mode, connection.learningApproval?.() ?? server.mode === 'phone')
     if (policy === 'denied') {
+      if (request.endpoint === 'learning-answer') throw new DeckError('bot/refused', '请先在服务器的已配对设备中开启“允许审批学习提案”。')
       if (computerControl(request.endpoint)) throw new DeckError('bot/refused', '此客户端只提供 DS-Bot 聊天与设置，不提供远程电脑控制或浏览器接管。')
       if (request.endpoint.startsWith('extra-')) throw new DeckError('bot/refused', '该增补操作尚未在此客户端开放，没有发送到服务器。')
       throw new DeckError('bot/refused', server.mode === 'browser' ? '此配对为浏览器权限，敏感操作请用服务器生成的手机配对码重新添加客户端。' : '该操作必须在服务器本机完成；客户端没有绕过远程权限。')
@@ -31,6 +33,7 @@ export class RequestGate {
     let sent = false
     const check = () => {
       const unknown = sent && (EXTRA_WRITES.has(request.endpoint) || learningWrite)
+      if (learningWrite && !(connection.learningApproval?.() ?? server.mode === 'phone')) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '学习审批授权已变化，已提交结果待确认；未自动重发。' : '学习审批授权已撤销，未发送操作。')
       if (context.signal?.aborted) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '请求已取消，服务器可能已执行，结果待确认；未自动重发。' : '请求已取消，未自动重发。')
       if (!token || !connection.valid(token, !openingRead(request.endpoint))) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/read-only', unknown ? '连接或状态已变化，操作结果待确认；未自动重发。' : '连接或状态已变化，当前为缓存，操作未发送。')
       if ((!backgroundRead(request.endpoint) || policy === 'unlock') && !context.active()) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '原服务器界面已切换或隐藏，操作结果待确认；未自动重发。' : '原服务器界面已切换或隐藏，操作未发送。')

@@ -11,6 +11,8 @@ class BoundFixture implements RequestConnection {
   sent: unknown[] = []
   readonly peer = {} as Peer
   mode: 'phone' | 'browser' = 'phone'
+  learningGrant: boolean | undefined
+  learningApproval() { return this.learningGrant ?? this.mode === 'phone' }
   view() { return { alias: '测试目标', mode: this.mode } }
   token() { return { generation: this.epoch, peer: this.peer } }
   valid(token: ConnectionToken) { return token.generation === this.epoch && token.peer === this.peer }
@@ -82,13 +84,31 @@ test('学习批准沿用手机配对权限，浏览器、隐藏和取消不能�
     { endpoint: 'learning-answer', payload: { id: 'proposal-a', approve: false } },
   ])
   connection.mode = 'browser'
-  await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => true }), /浏览器权限/)
+  await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => true }), /允许审批学习提案/)
   connection.mode = 'phone'
   await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => false }), /切换或隐藏/)
   const controller = new AbortController(); controller.abort()
   await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => true, signal: controller.signal }), /取消/)
   assert.equal(connection.sent.length, 2)
 })
+test('学习独立授权只允许对应审批，撤权后的在途回执仍标为未知而不重发', async () => {
+  const connection = new BoundFixture(); connection.mode = 'browser'; connection.learningGrant = true
+  const gate = new RequestGate()
+  assert.equal(endpointPolicy('learning-answer', 'browser', true), 'unlock')
+  assert.equal(endpointPolicy('provider-key', 'browser', true), 'denied')
+  await gate.execute(connection, 'learning-answer', { id: 'p1', approve: false }, { active: () => true })
+  connection.learningGrant = false
+  for (const mode of ['phone', 'browser'] as const) {
+    connection.mode = mode
+    await assert.rejects(gate.execute(connection, 'learning-answer', { id: 'p2', approve: true }, { active: () => true }), { code: 'bot/refused' })
+  }
+  assert.equal(connection.sent.length, 1)
+  connection.learningGrant = true
+  connection.call = async (endpoint, payload) => { connection.sent.push({ endpoint, payload }); connection.learningGrant = false; return { applied: true } }
+  await assert.rejects(gate.execute(connection, 'learning-answer', { id: 'p2', approve: true }, { active: () => true }), { code: 'bot/outcome-unknown' })
+  assert.equal(connection.sent.length, 2)
+})
+
 test('学习审批已发送后切服、断线或取消，回执标记未知且不自动重发', async () => {
   for (const boundary of ['navigation', 'connection', 'abort']) {
     const connection = new BoundFixture(); const controller = new AbortController(); let active = true
@@ -155,7 +175,10 @@ test('浏览器配对不能借系统验证提权，本机专属端点不进入�
   await assert.rejects(gate.execute(connection, 'phone-remove', {}, { active: () => true }))
   await assert.rejects(gate.execute(connection, 'mcp-create-token', {}, { active: () => true }))
   assert.equal(verified, 0); assert.equal(connection.sent.length, 0)
-  assert.equal(endpointPolicy('unknown-future-operation', 'phone'), 'unlock')
+  assert.equal(endpointPolicy('unknown-future-operation', 'phone'), 'denied')
+  for (const mode of ['phone', 'browser'] as const) {
+    for (const endpoint of ['session-page', 'session-control', 'workspace-read', 'terminal-create', 'api-token', 'plugins-install', 'speech-transcribe']) assert.equal(endpointPolicy(endpoint, mode), 'denied')
+  }
 })
 test('切走再切回也不能复用原导航代次的验证', async () => {
   const connection = new BoundFixture(); let epoch = 1
@@ -186,14 +209,14 @@ test('电脑与浏览器接管在两种配对模式均拒绝，不弹系统验�
 test('聊天、Bot 设置与已有截图附件保留，敏感设置仍逐次验证', async () => {
   const connection = new BoundFixture(); let verifications = 0
   const gate = new RequestGate({ verify: async () => { verifications += 1; return true } })
-  for (const endpoint of ['chat', 'room-chat', 'models', 'providers', 'memory-view', 'schedules', 'image', 'file-download', 'update-bot', 'set-prefs', 'send', 'capabilities']) assert.equal(endpointPolicy(endpoint, 'phone'), 'safe')
+  for (const endpoint of ['chat', 'room-chat', 'models', 'providers', 'memory-view', 'schedules', 'image', 'file-download', 'update-bot', 'set-prefs', 'send']) assert.equal(endpointPolicy(endpoint, 'phone'), 'safe')
   for (const endpoint of ['chat', 'send', 'update-bot', 'set-prefs']) await gate.execute(connection, endpoint, {}, { active: () => true })
   assert.equal(verifications, 0)
-  assert.equal(endpointPolicy('computer-shot', 'phone'), 'unlock')
+  assert.equal(endpointPolicy('computer-shot', 'phone'), 'denied')
   assert.equal(endpointPolicy('computer-shot', 'browser'), 'denied')
-  await gate.execute(connection, 'computer-shot', { attachmentId: 'fictional-recorded-shot' }, { active: () => true })
+  await assert.rejects(gate.execute(connection, 'computer-shot', { attachmentId: 'fictional-recorded-shot' }, { active: () => true }))
   await gate.execute(connection, 'provider-key', { value: 'fictional-key' }, { active: () => true })
-  assert.equal(verifications, 2); assert.equal(connection.sent.length, 6)
+  assert.equal(verifications, 1); assert.equal(connection.sent.length, 5)
 })
 test('工具权限审批沿用允许一次或拒绝，失效界面和取消不发送', async () => {
   for (const mode of ['phone', 'browser'] as const) {

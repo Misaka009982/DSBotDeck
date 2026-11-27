@@ -16,7 +16,8 @@ export function extraReadFailure(value: unknown): string {
     default: return '会话读取失败，原历史没有被空回包替代，可重新读取。'
   }
 }
-export async function readExtraPage(call: ExtraReadCall, endpoint: ExtraReadEndpoint, payload: Record<string, unknown>, fallback: () => Promise<unknown>, mode: ExtraReadMode = 'ready'): Promise<Record<string, unknown>> {
+export async function readExtraPage(call: ExtraReadCall, endpoint: ExtraReadEndpoint, payload: Record<string, unknown>, fallback: () => Promise<unknown>, mode: ExtraReadMode = 'ready', signal?: AbortSignal): Promise<Record<string, unknown>> {
+  if (signal?.aborted) throw new DeckError('RPC_ABORTED', '原会话读取已取消。')
   if (mode === 'incompatible') throw new DeckError('bot/incompatible', '服务器增补读取模块版本不兼容。')
   if (mode === 'legacy' && payload.fullMessages === true) throw new DeckError('bot/refused', '旧服务器没有完整消息读取声明。')
   let unsupported = missing.get(call)
@@ -24,7 +25,7 @@ export async function readExtraPage(call: ExtraReadCall, endpoint: ExtraReadEndp
   let value: unknown
   if (mode === 'legacy' || unsupported.has(endpoint) && payload.fullMessages !== true) value = await fallback()
   else {
-    try { value = await call(endpoint, payload) }
+    try { value = await call(endpoint, payload, signal) }
     catch (error) {
       const message = record(error)?.message
       // 原服务端没有冒号；只兼容明确指向本端点的两种完整消息，不按包含关系猜测。
@@ -36,6 +37,7 @@ export async function readExtraPage(call: ExtraReadCall, endpoint: ExtraReadEndp
       value = await fallback()
     }
   }
+  if (signal?.aborted) throw new DeckError('RPC_ABORTED', '原会话读取已取消。')
   const page = record(value)
   if (!page || !Array.isArray(page.items)) throw new DeckError('bot/incompatible', '服务器聊天或任务页格式无效。')
   return page

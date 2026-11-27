@@ -9,6 +9,7 @@ const aliases = {
   '@dsbot/link': 'link/src/index.ts', '@dsbot/notices': 'mobile/src/team/notices.ts',
   '@dsbot/characters': 'ds-bot/src/client/characters.js', '@dsbot/themes': 'ds-bot/src/client/themes.js',
   '@dsbot/gated': 'mobile/src/team/gated.ts', '@dsbot/browser-policy': 'ds-bot/src/shared/browser-endpoints.js',
+  '@dsbot/remote-policy': 'ds-bot/src/shared/remote-endpoints.js',
 }
 registerHooks({
   resolve(specifier, context, nextResolve) {

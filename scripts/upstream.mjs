@@ -5,16 +5,16 @@ import { readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { paintSource, SCOPED_UI_FILES } from './paint-source.mjs'
 
-export const REFERENCE_COMMIT = 'd104d9ca18d69a35460f14e15dff4d553181433a'
+export const REFERENCE_COMMIT = '7963e66a74f40d23daa288a76cdca72b34e39561'
 export const BOOTSTRAP_ID = '\0dsbotdeck-bootstrap'
-export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'deep-view', 'react-markdown', 'remark-gfm', '@xterm/xterm', '@xterm/addon-fit'])
+export const UI_PACKAGES = new Set(['react', 'react-dom', 'qrcode-generator', 'deep-view', 'react-markdown', 'remark-gfm', 'remark-math', 'highlight.js', 'katex', '@xterm/xterm', '@xterm/addon-fit'])
 const REQUIRED = [
   'app/ui/src/main.js', 'app/ui/src/app.js', 'app/ui/src/team.js', 'app/ui/src/chat.js',
   'app/ui/src/primitives.js', 'ds-bot/package.json', 'ds-bot/src/client/api.js', 'ds-bot/src/client/themes.js',
   'ds-bot/src/client/mark.js', 'ds-bot/src/client/overlays.js', 'ds-bot/src/client/bot-tasks.js', 'ds-bot/src/client/cells.js', 'ds-bot/src/client/activity-row.js',
   'ds-bot/src/client/at-menu.js', 'ds-bot/src/client/command-actions.js',
   ...SCOPED_UI_FILES,
-  'ds-bot/src/shared/browser-endpoints.js', 'mobile/src/team/gated.ts',
+  'ds-bot/src/shared/browser-endpoints.js', 'ds-bot/src/shared/remote-endpoints.js', 'mobile/src/team/gated.ts',
   'mobile/src/team/notices.ts', 'link/src/index.ts', 'LICENSE', 'NOTICE',
 ]
 const slash = value => value.replaceAll('\\', '/')
@@ -31,9 +31,27 @@ export function bootstrapText(source) {
   if (!source.includes(mount) || !source.includes(appImport)) {
     throw new Error('上游 UI 启动入口已变化，请更新 DSBotDeck 的入口适配；未修改上游文件。')
   }
-  const systemTheme = "const dark = matchMedia('(prefers-color-scheme: dark)')\nconst paint = () => { document.body.toggleAttribute('data-ds-dark-theme', dark.matches) }\npaint()\ndark.addEventListener('change', paint)"
-  if (source.split(systemTheme).length !== 2) throw new Error('上游 UI 系统明暗入口已变化，请更新只读主题适配；未修改上游文件。')
-  return source.replace(appImport, '').replace(mount, '').replace(systemTheme, '// 明暗由 Deck 本机设置统一控制，不保留上游强制跟随系统的监听。')
+  const mode = 'paintMode(undefined)'
+  if (source.split(mode).length !== 2) throw new Error('上游 UI 系统明暗入口已变化，请更新只读主题适配；未修改上游文件。')
+  source = source.replace(appImport, '').replace(mount, '').replace(mode, '// 明暗由 Deck 本机设置统一控制。')
+  // Deck 复用原组件及样式，不装配本机 Classic/插件服务或其启动注册。
+  for (const line of [
+    "import { registerBuiltinToolViews } from './builtin-tool-views.js'",
+    "import { registerClassicPlanView } from './classic-plan-view.js'",
+    "import { registerEngineSettingsPlugin } from './engine-settings-bridge.js'",
+    "import { paintMode } from './mode.js'",
+    "import { pluginRuntime } from './plugin-runtime.js'",
+    "import { slots } from './slots.js'",
+    "pluginRuntime.provide('slots', slots)",
+    "pluginRuntime.use({ id: 'ds-bot.builtin-tool-views', name: 'Built-in tool views', pages: ['chat'] }, () => registerBuiltinToolViews(slots))",
+    "pluginRuntime.use({ id: 'ds-bot.classic-plan-view', name: 'Classic plan card', pages: ['chat'] }, () => registerClassicPlanView(slots))",
+    "registerEngineSettingsPlugin(pluginRuntime, { pages: ['settings'] })",
+    'globalThis.dsBotPlugins = pluginRuntime',
+  ]) {
+    if (source.split(line).length !== 2) throw new Error('上游 UI 本机服务启动入口已变化，请更新只读适配。')
+    source = source.replace(line, '')
+  }
+  return source
 }
 
 export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {

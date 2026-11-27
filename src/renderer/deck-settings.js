@@ -3,7 +3,7 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { CloseIcon } from '@dsbot/client/icons.js'
 import { CharacterGrid } from '@dsbot/client/bot-settings.js'
-import { ThemeGallery } from '@dsbot/client/settings.js'
+import { ThemeGallery } from './theme-gallery.js'
 import { allThemes } from '@dsbot/themes'
 import { DEFAULT_APP_MARK } from '../shared/app-icon.ts'
 import { BotMark, lookOf } from '@dsbot/client/mark.js'

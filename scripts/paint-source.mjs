@@ -8,7 +8,9 @@ const SCOPE_EDITS = new Map([
   ['ds-bot/src/client/settings.js', [
     ["pages: [['computer', 'Computer use'], ['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]", "pages: [['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]"],
     ["tools: 'computer', guide: 'overview'", "tools: 'capabilities', guide: 'overview'"],
-    ['\nfunction ThemeGallery({ themes, current, dark, onPick }) {', '\nexport function ThemeGallery({ themes, current, dark, onPick }) {'],
+  ]],
+  ['ds-bot/src/client/appearance-page.js', [
+    ['function ThemeCard({ id, theme, current, dark, pick, children }) {', 'export function ThemeCard({ id, theme, current, dark, pick, children }) {'],
   ]],
   ['ds-bot/src/client/bot-settings.js', [
     ["import { t } from './i18n.js'", "import { t } from './i18n.js'\nimport { PrivateGoalSettings } from '@dsbotdeck/private-goal'"],
@@ -20,7 +22,7 @@ const SCOPE_EDITS = new Map([
     ["  const pill = h('button', {", "  const pill = h(HeaderActions, {\n    botId: !away ? bot?.id : undefined, name, openSettings: actions.openSettings,"],
   ]],
   ['ds-bot/src/client/learning-card.js', [
-    ["function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions }) {", "export function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions, disabled = false }) {"],
+    ["export function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions }) {", "export function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions, disabled = false }) {"],
     ['    if (busyRef.current) return', '    if (busyRef.current || disabled) return'],
     ['    h(ProposalFoot, { busy, answer }))', '    h(ProposalFoot, { busy: busy || disabled, answer }))'],
   ]],
@@ -70,12 +72,13 @@ const SCOPE_EDITS = new Map([
     ["      roster.computer?.enabled ? h(Chip, null, t('Computer use')) : null,\n", ''],
   ]],
   ['ds-bot/src/client/member-status.js', [
-    ["    // Group and background-task approvals are answered directly through DS Bot;\n    // foreground own-chat approvals still use DSH's own inline card.\n    approval.answerable && (approval.roomId !== undefined || approval.taskId !== undefined)", "    // Deck 前台、群聊与后台均复用服务器审批接口，不依赖 DSH 本机卡。\n    approval.answerable === true"],
+    ['    approval.answerable\n', '    approval.answerable === true\n'],
+    ['  const canAlways = Boolean(approval.alwaysAllow) && !readOnly', '  const canAlways = false'],
   ]],
 ])
 export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys()]
 function replaceOnce(source, before, after) {
-  if (source.split(before).length !== 2) throw new Error('上游 UI 接入结构已变化，请更新只读构建适配；未修改上游文件。')
+  if (source.split(before).length !== 2) throw new Error(`上游 UI 接入结构已变化，请更新只读构建适配；锚点：${before.slice(0, 120)}`)
   return source.replace(before, after)
 }
 export function paintSource(source, id, root) {
@@ -90,13 +93,12 @@ export function paintSource(source, id, root) {
   if (name === 'app/ui/src/team.js') {
     source = replaceOnce(source, '  const pull = async () => {', '  const pull = async (full = false, signal) => {')
     source = replaceOnce(source,
-      "    const value = await call('state', { since: known.revision, models: known.modelsKey ?? '', locale: language() })\n    if (order < applied) return",
-      "    const value = await call('state', { since: full ? -1 : known.revision, models: known.modelsKey ?? '', locale: language() }, signal)\n    if (full && (signal?.aborted || value.unchanged || !Number.isSafeInteger(value.revision) || !Array.isArray(value.bots) || !Array.isArray(value.rooms) || order < applied || value.revision < roster.getSnapshot().revision)) throw new DeckError('bot/stale', '完整目标状态未取得，请重新读取。')\n    if (order < applied) return")
+      "    const value = await call('state', { since: known.revision, models: known.modelsKey ?? '', live: liveKey, locale: language() })\n    if (order < applied) return",
+      "    const value = await call('state', { since: full ? -1 : known.revision, models: known.modelsKey ?? '', live: full ? undefined : liveKey, locale: language() }, signal)\n    if (full && (signal?.aborted || value.unchanged || !Number.isSafeInteger(value.revision) || !Array.isArray(value.bots) || !Array.isArray(value.rooms) || order < applied || value.revision < roster.getSnapshot().revision)) throw new DeckError('bot/stale', '完整目标状态未取得，请重新读取。')\n    if (order < applied) return")
     source = replaceOnce(source,
-      '    if (value.unchanged || (value.revision === current.revision && value.modelsKey === current.modelsKey)) return',
-      '    if (value.unchanged || (!full && value.revision === current.revision && value.modelsKey === current.modelsKey)) return')
+      '    if (value.unchanged || (value.revision === current.revision && value.modelsKey === current.modelsKey)) {',
+      '    if (value.unchanged || (!full && value.revision === current.revision && value.modelsKey === current.modelsKey)) {')
     source = replaceOnce(source, '  const actions = {', '  const actions = {\n    deckRefreshLearning: async signal => { await pull(true, signal); return roster.getSnapshot() },\n    deckRefreshGoals: async signal => { await pull(true, signal); return roster.getSnapshot() },')
-    source = replaceOnce(source, '    const changed = {}', '    const changed = learningLiveChanges(current, value)')
     source = replaceOnce(source,
       "      actions.noteLive(part, 'tool', doing?.tool ? { label: workPhrase(doing), state: toolState(doing.tool) } : null)",
       "      const tool = workToolNote(doing)\n      actions.noteLive(part, 'tool', tool ? { ...tool, state: toolState(tool.tool) } : null)")
@@ -106,14 +108,16 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source,
       '    if (value.capabilityStatuses !== undefined && JSON.stringify(value.capabilityStatuses) !== JSON.stringify(current.capabilityStatuses ?? {})) changed.capabilityStatuses = value.capabilityStatuses',
       '    if (value.capabilityStatuses !== undefined && JSON.stringify(value.capabilityStatuses) !== JSON.stringify(current.capabilityStatuses ?? {})) changed.capabilityStatuses = value.capabilityStatuses\n    // 设备授权可以先于团队 revision 变化，不能被原增量早退忽略。\n    if (value.extras !== undefined && JSON.stringify(value.extras) !== JSON.stringify(current.extras ?? null)) changed.extras = value.extras')
-    return "import { workToolNote } from '@dsbotdeck/tool-model'\nimport { learningLiveChanges } from '@dsbotdeck/learning-model'\nimport { DeckError } from '@dsbotdeck/validation'\n" + source
+    return "import { workToolNote } from '@dsbotdeck/tool-model'\nimport { DeckError } from '@dsbotdeck/validation'\n" + source
   }
   if (name === 'ds-bot/src/client/activity-row.js') {
     source = replaceOnce(source, 'inputAt > (tool?.at ?? 0)', 'preferInputStatus(inputAt, tool)')
     return "import { preferInputStatus } from '@dsbotdeck/tool-model'\n" + source
   }
   if (name === 'ds-bot/src/client/cells.js') {
-    source = replaceOnce(source, '    control,\n    row.images ?', "    control,\n    h(UserAttachments, { files: row.fileRefs }),\n    row.images ?")
+    source = replaceOnce(source,
+      "fileNames ? h('span', { className: 'bt-uimages', 'data-text-interaction-exclude': '' }, fileNames) : null",
+      'fileNames ? h(UserAttachments, { files: row.fileRefs }) : null')
     source = "import { UserAttachments } from '@dsbotdeck/composer-attachments'\nimport { LearningHistoryCard } from '@dsbotdeck/learning-cards'\n" + source
     source = replaceOnce(source, 'function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {', 'export function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {')
     const anchor = "    case 'divider': return h(PartLine, { key, time: row.time })"
@@ -126,54 +130,12 @@ export function paintSource(source, id, root) {
     return "import { PeerEvent } from '@dsbotdeck/peer-event'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\n" + TOOL_STEPS_IMPORT + source
   }
   if (name === 'app/ui/src/chat.js') {
-    source = replaceOnce(source, "call('chat', { botId,", "call('chat', { botId, steps: true,")
-    source = replaceOnce(source, "call('room-chat', { roomId,", "call('room-chat', { roomId, steps: true,")
-    source = replaceOnce(source, 'function useChat(botId, roomId, part, feed) {', 'function useChat(botId, roomId, part, feed, fullMessages, extraReads) {')
-    source = replaceOnce(source, '  const [stream, setStream] = useState(null)', '  const [stream, setStream] = useState(null)\n  const [failure, setFailure] = useState(null)')
-    source = replaceOnce(source,
-      "      const page = roomId !== undefined\n        ? await call('room-chat', { roomId, steps: true, ...(cursor ? { cursor } : {}) })\n        : await call('chat', { botId, steps: true, ...(cursor ? { cursor } : {}) })",
-      "      const page = await readExtraPage(call, 'extra-messages', { ...(roomId !== undefined ? { roomId } : { botId }), ...(cursor ? { cursor } : {}), fullMessages }, () => roomId !== undefined\n        ? call('room-chat', { roomId, steps: true, ...(cursor ? { cursor } : {}) })\n        : call('chat', { botId, steps: true, ...(cursor ? { cursor } : {}) }), extraReads)")
-    source = replaceOnce(source, '      const pageItems = roomId !== undefined ? adaptRoomItems(page.items)', '      setFailure(null)\n      const pageItems = roomId !== undefined ? adaptRoomItems(page.items)')
-    source = replaceOnce(source,
-      "    } catch {\n      if (gen.current !== myGen) return\n      ready.current = cursor !== undefined || refresh || ready.current\n      if (!refresh) setView(current => ({ ...current, loading: false, failed: true }))",
-      "    } catch (error) {\n      if (gen.current !== myGen) return\n      setFailure({ message: extraReadFailure(error), cursor })\n      ready.current = cursor !== undefined || refresh || ready.current\n      setView(current => ({ ...current, loading: false, failed: true, ...(fullMessages && errorCode(error) === 'bot/refused' ? { items: [], sessionId: null } : {}) }))")
-    source = replaceOnce(source, '  }, [active, botId, roomId, part])\n  const loadRef = useRef(load)', '  }, [active, botId, roomId, part, fullMessages, extraReads])\n  const loadRef = useRef(load)')
-    source = replaceOnce(source, '  // A new part starts the chat over.\n  useEffect(() => {', '  // 换段或完整消息授权变化先释放旧历史，保留原 Composer 草稿。\n  useLayoutEffect(() => {')
-    source = replaceOnce(source, '    setStream(null)\n    setView({ sessionId: null,', '    setStream(null); setFailure(null)\n    setView({ sessionId: null,')
-    source = replaceOnce(source, '  }, [active, botId, roomId, part])\n\n  useEffect(() => feed.on', '  }, [active, botId, roomId, part, fullMessages, extraReads])\n\n  useEffect(() => feed.on')
-    source = replaceOnce(source, '  return { view, stream, pending, load, send, keep }', '  return { view, stream, pending, load, send, keep, failure }')
-    source = replaceOnce(source, '  const { view, stream, pending, load, send, keep } = useChat(bot?.id, room?.id, sessionId, feed)', '  const extraMode = remoteReadMode(roster)\n  const { view, stream, pending, load, send, keep, failure } = useChat(bot?.id, room?.id, sessionId, feed, extraMode.fullMessages, extraMode.state)\n  const historyItems = useLearningHistory(sessionId, view)')
-    source = replaceOnce(source, 'h(ChatRows, { items: view.items, sessionId, roster, actions, useUi: hooks.useUi, clock: true })', 'h(ChatRows, { items: historyItems, sessionId, roster, actions, useUi: hooks.useUi, clock: true })')
-    source = replaceOnce(source, 'onClick: () => load(view.cursor ?? undefined, scroller.current)', 'onClick: () => load(failure?.cursor, scroller.current)')
-    source = replaceOnce(source, "        earlier ? h('div', { className: 'bt-earlier-top' }, earlier) : null,", "        failure ? h('p', { className: 'deck-chat-read-error', role: 'alert' }, failure.message) : null,\n        earlier ? h('div', { className: 'bt-earlier-top' }, earlier) : null,")
-    source = replaceOnce(source, '  const inputActions = useInput(field, setText)', '  const inputActions = useInput(field, setText)\n  const attachments = useComposerAttachments({ sessionId, field, disabled, onSend, onError: setError, setText })\n  const menu = useComposerMenu({ sessionId, text, setText, field, disabled, actions, useRoster, onError: setError })')
-    source = replaceOnce(source, "    if (value === '' || disabled) return", "    if (value === '' && !attachments.hasFiles || disabled || attachments.blocked || menu.isBlocked()) return")
-    source = replaceOnce(source, '      await onSend(value)', '      if (attachments.hasFiles) await attachments.send(value)\n      else if (!menu.runCommand(value)) await onSend(value)')
-    source = replaceOnce(source, '  const send = async (text, actions, sessionId) => {', '  const send = async (text, actions, sessionId, delivery, fileRefs, images) => {')
-    source = replaceOnce(source, "    const entry = { kind: 'user', text, time: Date.now() }", "    const entry = { kind: 'user', text, time: Date.now(), ...(fileRefs?.length ? { fileRefs } : {}), ...(images ? { images } : {}) }")
-    source = replaceOnce(source, '      await actions.send(sessionId, text)', '      if (delivery) { await delivery(); if (gen.current === myGen) void loadRef.current(undefined, undefined, true) }\n      else await actions.send(sessionId, text)')
-    source = replaceOnce(source, '        onSend: text => send(text, actions, sessionId),', '        onSend: (text, delivery, fileRefs, images) => send(text, actions, sessionId, delivery, fileRefs, images),')
-    source = replaceOnce(source, "  return h('div', { className: 'dsb-composer-wrap' },\n", "  return h('div', { className: 'dsb-composer-wrap', onPaste: attachments.onPaste, onDragOver: attachments.onDragOver, onDrop: attachments.onDrop },\n    menu.content,\n    attachments.content,\n")
-    source = replaceOnce(source, "      h('div', { className: 'dsb-composer-tools' }, h(ComposerPlus,", "      attachments.input,\n      h('div', { className: 'dsb-composer-tools' }, h(ComposerPlus,")
-    source = replaceOnce(source, "disabled: disabled || text.trim() === ''", "disabled: disabled || attachments.blocked || text.trim() === '' && !attachments.hasFiles")
-    source = replaceOnce(source, "          'data-composer-input': '',\n          onChange: event => setText(event.target.value),", "          'data-composer-input': '',\n          ...menu.inputProps,\n          onChange: event => { setText(event.target.value); menu.onSelect() },")
-    source = replaceOnce(source, '          onKeyDown: (event) => {\n', '          onKeyDown: (event) => {\n            if (menu.onKeyDown(event)) return\n')
-    source = replaceOnce(source,
-      '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)',
-      '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)\n  const approvalKey = hooks.useWork(work => JSON.stringify(room === undefined ? foregroundApprovals(work, bot?.id, sessionId) : []))\n  const approvals = JSON.parse(approvalKey)')
-    source = replaceOnce(source, '[view.items, stream, pending, running, question]', '[view.items, stream, pending, running, question, approvalKey, roster.learning, roster.learningSettled]')
-    source = replaceOnce(source,
-      "          question ? h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs) }) : null))),",
-      "          question ? h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs) }) : null,\n          h(LearningCards, { sessionId })))),")
-    source = replaceOnce(source,
-      "    h('div', { className: 'dsb-composer-root' },",
-      "    h('div', { className: 'dsb-composer-root' },\n      approvals.length ? h('div', { className: 'deck-chat-approvals', role: 'group', 'aria-label': t('Approval') }, approvals.map(approval => h(ApprovalCard, { key: approval.id, approval, bot, actions, showBot: true }))) : null,")
-    const feed = '  useEffect(() => feed.on((event, data) => {\n'
-    source = replaceOnce(source, feed, `  // 保留原读取上下文，工具变化只合并刷新可见且非缓存的聊天。\n  useEffect(() => {\n    const read = loadRef.current\n    const generation = gen.current\n    const available = () => gen.current === generation && loadRef.current === read && document.visibilityState === 'visible' && !document.body.hasAttribute('data-deck-cached')\n    const latest = () => { if (ready.current && available()) void read(undefined, undefined, true) }\n    const dispose = watchToolSteps(feed, { botId, roomId, sessionId: part }, latest, available)\n    document.addEventListener('visibilitychange', latest)\n    return () => { dispose(); document.removeEventListener('visibilitychange', latest) }\n  }, [feed, botId, roomId, part, fullMessages, extraReads])\n\n${feed}`)
-    const anchor = '  const onScroll = () => {\n'
-    source = replaceOnce(source, anchor, `  // 本地远程壳只在成功布局最新一页后确认对应结果。\n  useLayoutEffect(() => {\n    if (!view.loading && !view.failed && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)\n  }, [view.items, view.loading, view.failed, view.sessionId])\n\n${anchor}`)
-    source = replaceOnce(source, '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n', '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n    if (follow.current && !view.loading && !view.failed) team.deckPaint?.(bot?.id, room?.id, node)\n')
-    return "import { useComposerAttachments } from '@dsbotdeck/composer-attachments'\nimport { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { LearningCards, useLearningHistory } from '@dsbotdeck/learning-cards'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
+    // 只读复用新版原分页合并与群消息投影，不导入依赖本机日志的 Chat/Composer。
+    const first = 'const sameItem = (a, b) =>'; const last = 'const userItemKey = item =>'
+    if (source.split(first).length !== 2 || source.split(last).length !== 2) throw new Error('上游聊天分页结构已变化，请更新远程适配。')
+    const start = source.indexOf(first); const end = source.indexOf(last)
+    if (end <= start) throw new Error('上游聊天分页结构已变化，请更新远程适配。')
+    return source.slice(start, end).replace('const sameItem =', 'export const sameItem =')
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")
@@ -182,16 +144,17 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source, 'export function TaskReaderView({ bot, task, actions }) {', 'export function TaskReaderView({ bot, task, actions, fullMessages = false }) {')
     source = replaceOnce(source, '  const scrollRef = useRef(null)', '  const scrollRef = useRef(null)\n  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()\n  const diagnosticHistory = useRef(null)\n  if (diagnosticHistory.current === null) diagnosticHistory.current = new DiagnosticHistoryModel()')
     source = replaceOnce(source, '  }, [botId, taskId, showSteps])', '  }, [botId, taskId, showSteps, fullMessages])')
-    source = replaceOnce(source, '  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current) => {', `  const noteReadError = err => {
+    source = replaceOnce(source, '  const canAlways = Boolean(toolApproval?.alwaysAllow) && !readOnly', '  const canAlways = false')
+    source = replaceOnce(source, '  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current, { force = false } = {}) => {', `  const noteReadError = err => {
     if (fullMessages && errorCode(err) === 'bot/refused') {
       setPage(null); setOlder([]); setOlderCursor({ active: false, cursor: null })
     }
     setError(extraReadFailure(err))
   }
-  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current) => {`)
+  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current, { force = false } = {}) => {`)
     source = replaceOnce(source,
-      "      setError(hostText(err?.message ?? String(err)))\n    } finally {\n      if (mountedRef.current && !quiet && gen === reqGenRef.current) setLoading(false)",
-      "      noteReadError(err)\n    } finally {\n      if (mountedRef.current && !quiet && gen === reqGenRef.current) setLoading(false)")
+      "          setError(hostText(err?.message ?? String(err)))\n        }\n        if (mountedRef.current && !isQuiet",
+      "          noteReadError(err)\n        }\n        if (mountedRef.current && !isQuiet")
     source = replaceOnce(source,
       "      setError(hostText(err?.message ?? String(err)))\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)",
       "      noteReadError(err)\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)")

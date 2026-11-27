@@ -75,6 +75,7 @@ const aliases = {
   '@dsbot/characters': path.join(upstream.root, 'ds-bot/src/client/characters.js'),
   '@dsbot/themes': path.join(upstream.root, 'ds-bot/src/client/themes.js'),
   '@dsbot/browser-policy': path.join(upstream.root, 'ds-bot/src/shared/browser-endpoints.js'),
+  '@dsbot/remote-policy': path.join(upstream.root, 'ds-bot/src/shared/remote-endpoints.js'),
 }
 const result = await bundle({
   absWorkingDir: clientRoot,
@@ -104,6 +105,10 @@ await copyFile(path.join(clientRoot, 'node_modules/jsqr/LICENSE'), path.join(dis
 for (const name of ['xterm', 'addon-fit']) {
   await mkdir(path.join(dist, `licenses/xterm-${name}`), { recursive: true })
   await copyFile(path.join(clientRoot, `node_modules/@xterm/${name}/LICENSE`), path.join(dist, `licenses/xterm-${name}/LICENSE`))
+}
+for (const [name, file] of [['highlight.js', 'LICENSE'], ['katex', 'LICENSE'], ['remark-math', 'license']]) {
+  await mkdir(path.join(dist, `licenses/${name}`), { recursive: true })
+  await copyFile(path.join(clientRoot, `node_modules/${name}/${file}`), path.join(dist, `licenses/${name}/LICENSE`))
 }
 const assets = path.join(dist, 'assets')
 await mkdir(assets, { recursive: true })

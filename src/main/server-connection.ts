@@ -4,6 +4,7 @@ import { createNoticeCursor } from '@dsbot/notices'
 import type { BotResult, SavedServer, ServerView, TeamView } from '../shared/domain.ts'
 import { emptyCounts } from '../shared/domain.ts'
 import { countEntities, TaskModel } from '../shared/task-model.ts'
+import { learningCanAnswer } from '../shared/learning-model.ts'
 import { DeckError, errorCode, finite, record, safeMessage } from '../shared/validation.ts'
 import type { Peer, PeerEvent, PeerFactory } from './link-factory.ts'
 
@@ -62,6 +63,7 @@ export class ServerConnection {
       team: this.team === null ? null : structuredClone(this.team), counts: this.team === null ? emptyCounts() : countEntities(this.team.entities),
     }
   }
+  learningApproval(): boolean { return !this.stale && this.state === 'ready' && learningCanAnswer(this.raw, this.config.mode) }
   token(): ConnectionToken | null { return this.peer && this.authenticated ? { generation: this.generation, peer: this.peer } : null }
   valid(token: ConnectionToken, requireFresh = true): boolean {
     return this.peer === token.peer && this.generation === token.generation && this.authenticated && !this.stopped && (!requireFresh || !this.stale && this.state === 'ready')

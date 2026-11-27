@@ -11,7 +11,7 @@ test('Windows 工作流使用独立同级源码、固定上游与最小凭据权
   assert.ok(text.includes('contents: read')); assert.equal(text.includes('contents: write'), false)
   assert.ok(text.includes('working-directory: DSBotDeck'))
   assert.ok(text.includes('path: DSBotDeck')); assert.ok(text.includes('path: DS-Bot'))
-  assert.ok(text.includes('repository: Fei2411/DS-Bot'))
+  assert.ok(text.includes('repository: Fei-Craft/DS-Bot'))
   assert.ok(text.includes(`DSBOT_UPSTREAM_REF: '${REFERENCE_COMMIT}'`))
   assert.ok(text.includes('ref: ${{ inputs.upstream_ref || env.DSBOT_UPSTREAM_REF }}'))
   assert.equal((text.match(/persist-credentials: false/g) ?? []).length, 2)

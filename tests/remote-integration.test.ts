@@ -381,6 +381,27 @@ test('学习审批通过真实scheme和原配对链路回传选择，切服及�
     assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'learning-answer'), false)
   })
 })
+test('设备学习授权穿过真实状态投影与scheme，完整消息开关不能代替且撤销立即拒绝', async () => {
+  for (const mode of ['phone', 'browser'] as const) {
+    await withClient(async (manager, peers) => {
+      const peer = peers.get('server-a'); assert.ok(peer)
+      const connection = manager.connection('server-a')
+      manager.navigate('server-a', { action: 'chat', kind: 'bot', id: 'server-a-bot' })
+      const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), gate: new RequestGate(), connection: () => connection,
+        active: () => true, instance: () => 'view-a', context: () => () => true, renderedTarget: () => ({ kind: 'bot', id: 'server-a-bot' }), read: () => {} })
+      const request = () => new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'learning-answer', payload: { id: 'proposal-a', approve: false } }) })
+      const state = (allowed: boolean) => ({ unchanged: true, revision: 1, extras: { schema: 1, fullMessages: !allowed, learningApproval: { schema: 1, allowed } } })
+      connection.applyState(state(false))
+      assert.equal((await (await handler(request())).json() as { ok: boolean }).ok, false)
+      assert.equal(peer.sent.some(entry => entry.endpoint === 'learning-answer'), false)
+      connection.applyState(state(true)); peer.resourceReplies.set('learning-answer', { applied: false })
+      assert.equal((await (await handler(request())).json() as { ok: boolean }).ok, true)
+      connection.applyState(state(false))
+      assert.equal((await (await handler(request())).json() as { ok: boolean }).ok, false)
+      assert.equal(peer.sent.filter(entry => entry.endpoint === 'learning-answer').length, 1)
+    }, { servers: [{ ...saved('server-a'), mode }, saved('server-b')] })
+  }
+})
 test('过期审批不自动重发，切服或断线时不会发送旧授权', async () => {
   await withClient(async (manager, peers) => {
     const peer = peers.get('server-a'); assert.ok(peer)

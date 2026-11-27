@@ -7,6 +7,15 @@ export interface LearningOperation extends LearningTarget { id: string; phase: '
 const own = (value: unknown, id: string): unknown => { const table = record(value); return table && Object.hasOwn(table, id) ? table[id] : undefined }
 const formatError = () => new DeckError('bot/incompatible', '学习提案格式不兼容，请在服务器核对；未开放批准。')
 const bodyText = (value: unknown): value is string => typeof value === 'string' && value.length <= 256 * 1024
+export function learningCanAnswer(value: unknown, mode: unknown): boolean {
+  const roster = record(value)
+  if (!roster || roster.readOnly || mode !== 'phone' && mode !== 'browser') return false
+  const extras = record(roster.extras)
+  if (extras?.schema !== undefined && extras.schema !== 1) return false
+  if (!extras || !Object.hasOwn(extras, 'learningApproval')) return mode === 'phone'
+  const capability = record(extras.learningApproval)
+  return extras.schema === 1 && capability?.schema === 1 && capability.allowed === true
+}
 export function learningLiveChanges(current: Record<string, unknown>, value: Record<string, unknown>): Record<string, unknown> {
   const changed: Record<string, unknown> = {}
   for (const key of ['learning', 'learningSettled', 'readOnly']) {
@@ -84,9 +93,10 @@ export function learningHistoryItems(items: readonly unknown[], target: Learning
   }
   return result
 }
-export function learningRequest(value: unknown, target: LearningTarget, proposal: LearningProposal, approve: boolean): { id: string; approve: boolean } {
+export function learningRequest(value: unknown, target: LearningTarget, proposal: LearningProposal, approve: boolean, mode: 'phone' | 'browser' = 'phone'): { id: string; approve: boolean } {
   const current = learningTarget(value, target.sessionId)
   if (!current || current.botId !== target.botId || typeof approve !== 'boolean' || record(value)?.readOnly) throw new DeckError('bot/read-only', '原私聊已变化或服务器只读，未发送学习审批。')
+  if (!learningCanAnswer(value, mode)) throw new DeckError('bot/refused', '请先在服务器的已配对设备中开启“允许审批学习提案”。')
   const latest = learningProposals(value, target).pending.find(item => item.id === proposal.id)
   if (!latest || JSON.stringify(latest) !== JSON.stringify(proposal)) throw new DeckError('bot/stale', '提案已变化或处理，请核对当前内容后操作。')
   return { id: proposal.id, approve }

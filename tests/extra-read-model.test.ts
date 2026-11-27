@@ -64,6 +64,22 @@ test('连接标记变化后旧缺失回包不能触发新连接的兼容读取',
   resetExtraReads(call); fail(new DeckError('bot/not-found', 'Unknown endpoint: extra-messages'))
   await assert.rejects(pending, /失效/); assert.equal(legacy, 0)
 })
+test('聊天分页把取消信号传入原请求，取消后迟到正文不再可用', async () => {
+  const controller = new AbortController()
+  let received: AbortSignal | undefined
+  let complete = (_value: unknown): void => { throw new Error('读取尚未开始') }
+  const call = (_endpoint: string, _payload: Record<string, unknown>, signal?: AbortSignal) => {
+    received = signal
+    return new Promise<unknown>(resolve => { complete = resolve })
+  }
+  const reading = readExtraPage(call, 'extra-messages', { botId: 'bot-a' }, async () => { throw new Error('不应回退') }, 'ready', controller.signal)
+  assert.equal(received, controller.signal)
+  controller.abort(); complete({ items: [{ kind: 'bot', text: '迟到正文' }] })
+  await assert.rejects(reading, { code: 'RPC_ABORTED' })
+  let called = false
+  await assert.rejects(readExtraPage(async () => { called = true; return { items: [] } }, 'extra-messages', {}, async () => { called = true; return { items: [] } }, 'legacy', controller.signal), { code: 'RPC_ABORTED' })
+  assert.equal(called, false)
+})
 test('工具详情队列最多三条并行，按顺序释放且取消排队项不发请求', async () => {
   const queue = new DetailReadQueue()
   const release: (() => void)[] = []; const started: number[] = []

@@ -2,7 +2,7 @@
 // 学习提案只按当前私聊与原提案编号操作，不从按钮状态推断远程保存。
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { LearningAnswers, learningHistoryItems, learningLiveChanges, learningProposals, learningRequest, learningTarget } from '../src/shared/learning-model.ts'
+import { LearningAnswers, learningCanAnswer, learningHistoryItems, learningLiveChanges, learningProposals, learningRequest, learningTarget } from '../src/shared/learning-model.ts'
 const target = { botId: 'bot-a', sessionId: 'part-a' }
 const skill = () => ({ id: 'skill-a', kind: 'skill', botId: 'bot-a', action: 'update', name: 'review', description: '新说明', content: '新内容', previous: { description: '旧说明', content: '旧内容' }, why: '改善核对流程' })
 const agents = () => ({ id: 'agents-a', kind: 'agents', botId: 'bot-a', folder: '/tmp/project', edits: [{ op: 'replace', old: '旧规则', text: '新规则', why: '补充核对条件' }] })
@@ -10,6 +10,23 @@ const roster = () => {
   const bot = { id: 'bot-a', sessionId: 'part-a', parts: ['old-a'], tasks: [{ id: 'task-a', sessionId: 'background-a' }] }
   return { byId: { 'bot-a': bot, 'part-a': bot, 'old-a': bot, 'background-a': bot }, roomsById: {}, learning: { 'bot-a': [skill(), agents()] }, learningSettled: {}, readOnly: null }
 }
+test('学习审批按独立设备授权开放，旧服务器只保留原手机权限且未知协议拒绝', () => {
+  assert.equal(learningCanAnswer({}, 'browser'), false)
+  assert.equal(learningCanAnswer({}, 'phone'), true)
+  assert.equal(learningCanAnswer({ extras: { schema: 2 } }, 'phone'), false)
+  for (const mode of ['phone', 'browser'] as const) {
+    for (const capability of [null, {}, { schema: 2, allowed: true }, { schema: 1, allowed: 'true' }, { schema: 1, allowed: false }]) {
+      assert.equal(learningCanAnswer({ extras: { schema: 1, fullMessages: true, learningApproval: capability } }, mode), false)
+    }
+    const allowed = { ...roster(), extras: { schema: 1, fullMessages: false, learningApproval: { schema: 1, allowed: true } } }
+    assert.equal(learningCanAnswer(allowed, mode), true)
+    assert.equal(learningCanAnswer({ ...allowed, readOnly: '只读' }, mode), false)
+    assert.deepEqual(learningRequest(allowed, target, skill(), true, mode), { id: 'skill-a', approve: true })
+    allowed.extras.learningApproval.allowed = false
+    assert.throws(() => learningRequest(allowed, target, skill(), false, mode), { code: 'bot/refused' })
+  }
+})
+
 test('学习提案在revision不变的增量里新增、结算和清空；缺省字段不误清旧状态', () => {
   const current = { ...roster(), revision: 1 }
   const live = { revision: 1, unchanged: true, learning: {}, learningSettled: { 'bot-a': [{ ...skill(), sessionId: 'part-a', outcome: 'approved' }] }, readOnly: '服务器只读' }

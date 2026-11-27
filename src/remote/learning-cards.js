@@ -3,7 +3,7 @@
 import { createElement as h, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { call } from '@dsbot/client/api.js'
 import { ProposalCard } from '@dsbot/client/learning-card.js'
-import { LearningAnswers, learningFailure, learningHistoryItems, learningProposals, learningRequest, learningTarget } from '../shared/learning-model.ts'
+import { LearningAnswers, learningCanAnswer, learningFailure, learningHistoryItems, learningProposals, learningRequest, learningTarget } from '../shared/learning-model.ts'
 import { DeckError } from '../shared/validation.ts'
 import { ResourceContext } from './resource-read.js'
 import { useDetailAvailability } from './tool-detail.js'
@@ -34,8 +34,8 @@ export function LearningCards({ sessionId }) {
   let proposals = { pending: [], settled: [] }; let invalid = ''
   try { proposals = learningProposals(context.roster, target) } catch (error) { invalid = error.message }
   const readable = shown && !context.cached && context.selection === sessionId && target !== null
-  const writable = readable && context.mode === 'phone' && !context.roster?.readOnly && !invalid
-  const identity = JSON.stringify([target, context.epoch, context.selection, context.cached, shown, context.mode, Boolean(context.roster?.readOnly)])
+  const writable = readable && learningCanAnswer(context.roster, context.mode) && !invalid
+  const identity = JSON.stringify([target, context.epoch, context.selection, context.cached, shown, context.mode, writable, Boolean(context.roster?.readOnly)])
   latest.current = { identity, roster: context.roster, readable, writable }
   const usable = () => latest.current.identity === identity && latest.current.readable && node.current?.isConnected
     && document.visibilityState === 'visible' && !document.body.hasAttribute('data-deck-cached') && !node.current.closest('[data-leaving]')
@@ -63,7 +63,7 @@ export function LearningCards({ sessionId }) {
   const answer = async (proposal, approve) => {
     if (!usable() || !latest.current.writable) throw new DeckError('bot/read-only', '当前界面不可提交学习审批。')
     if (request.current) throw new DeckError('bot/busy', '正在处理学习审批，请等待当前请求完成。')
-    const payload = learningRequest(latest.current.roster, target, proposal, approve)
+    const payload = learningRequest(latest.current.roster, target, proposal, approve, context.mode)
     const operation = answers.begin(target, proposal.id)
     const pending = { controller: new AbortController(), operation }; request.current = pending; setMessage('')
     try {
@@ -83,8 +83,8 @@ export function LearningCards({ sessionId }) {
   const cards = proposals.pending
   if (cards.length === 0 && !invalid && !message) return null
   const sending = cards.some(proposal => answers.get(proposal.id)?.phase === 'busy')
-  const reason = context.mode !== 'phone' ? '当前配对权限不能批准学习提案；请在服务器处理，或使用手机配对码连接。'
-    : context.roster?.readOnly ? '服务器当前只读，学习提案可查看，暂不能批准或拒绝。' : ''
+  const reason = context.roster?.readOnly ? '服务器当前只读，学习提案可查看，暂不能批准或拒绝。'
+    : !learningCanAnswer(context.roster, context.mode) ? '请在服务器“已配对设备”中，打开此设备“允许查看完整消息”下方的“允许审批学习提案”。' : ''
   return h('section', { ref: node, className: 'bt-learning-stack deck-learning-cards', 'aria-label': '学习提案审批' },
     reason ? h('p', { className: 'bt-hint', role: 'note' }, reason) : null,
     invalid || message ? h('p', { className: 'bt-learning-error', role: 'status' }, invalid || message) : null,
