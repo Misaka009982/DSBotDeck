@@ -7,7 +7,8 @@ import { build as bundle } from 'esbuild'
 import { build as buildUi } from 'vite'
 import { paintSource } from './paint-source.mjs'
 import { createAppIcons, ICON_SOURCE_FILES } from './app-icons.mjs'
-import { adaptUiSource, BOOTSTRAP_ID, bootstrapText, inside, readUpstream, sourceReceipt, UI_PACKAGES } from './upstream.mjs'
+import { BOOTSTRAP_ID, bootstrapText, inside, readUpstream, sourceReceipt, UI_PACKAGES } from './upstream.mjs'
+import { uiResolver } from './ui-resolver.mjs'
 
 const clientRoot = fileURLToPath(new URL('../', import.meta.url))
 const upstream = await readUpstream(clientRoot)
@@ -19,17 +20,8 @@ for (const folder of ['', 'renderer', 'remote', 'main', 'preload', 'assets', 'li
 await mkdir(dist, { recursive: true })
 const inputs = new Set()
 const plugin = () => ({
+  ...uiResolver(clientRoot, upstream.root),
   name: 'dsbotdeck-readonly-ui',
-  enforce: 'pre',
-  async resolveId(specifier, importer) {
-    const adapted = adaptUiSource(specifier, importer, clientRoot, upstream.root)
-    if (adapted !== null) return adapted
-    const packageName = specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0]
-    if (UI_PACKAGES.has(packageName) && importer && !importer.includes('/node_modules/')) {
-      return this.resolve(specifier, path.join(clientRoot, 'src/renderer/main.js'), { skipSelf: true })
-    }
-    return null
-  },
   async load(id) {
     if (id !== BOOTSTRAP_ID) return null
     const main = path.join(upstream.root, 'app/ui/src/main.js')
