@@ -76,13 +76,29 @@ const SCOPE_EDITS = new Map([
     ['  const canAlways = Boolean(approval.alwaysAllow) && !readOnly', '  const canAlways = false'],
   ]],
 ])
-export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys()]
+export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys(), 'app/ui/src/right-panel.js', 'app/ui/src/workspace-terminal.js']
 function replaceOnce(source, before, after) {
   if (source.split(before).length !== 2) throw new Error(`上游 UI 接入结构已变化，请更新只读构建适配；锚点：${before.slice(0, 120)}`)
   return source.replace(before, after)
 }
 export function paintSource(source, id, root) {
   const name = slash(path.relative(root, id))
+  // 只读提取原桌面的无传输呈现；本机 watch、文件打开及 PTY 接口不进入远程依赖图。
+  if (name === 'app/ui/src/right-panel.js') {
+    source = source.replaceAll('\r\n', '\n')
+    const first = 'const RefreshIcon = () =>'; const last = 'const WINDOWS_DRIVE_ABS_RE ='
+    if (source.split(first).length !== 2 || source.split(last).length !== 2) throw new Error('上游工作区结构已变化，请更新远程适配。')
+    return "import { createElement as h } from 'react'\nimport { fileSizeText } from './primitives.js'\nimport { t } from '../../../ds-bot/src/client/i18n.js'\nimport { ChevronRightIcon, DiffIcon, FileIcon, FolderIcon, TerminalIcon } from '../../../ds-bot/src/client/icons.js'\n"
+      + source.slice(source.indexOf(first), source.indexOf(last)).replace('const RefreshIcon =', 'export const RefreshIcon =').replace('function TreeBranch(', 'export function TreeBranch(')
+  }
+  if (name === 'app/ui/src/workspace-terminal.js') {
+    source = source.replaceAll('\r\n', '\n')
+    const first = 'export function readXtermTheme() {'; const last = 'export function createTerminalKeyHandler('
+    if (source.split(first).length !== 2 || source.split(last).length !== 2) throw new Error('上游终端主题结构已变化，请更新远程适配。')
+    const font = source.match(/^const DEFAULT_MONO_FONT = .+$/m)?.[0]
+    if (!font) throw new Error('上游终端字体结构已变化，请更新远程适配。')
+    return font + '\n' + source.slice(source.indexOf(first), source.indexOf(last))
+  }
   const scoped = SCOPE_EDITS.get(name)
   if (scoped !== undefined) {
     source = source.replaceAll('\r\n', '\n')

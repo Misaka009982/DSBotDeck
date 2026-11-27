@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
+import { workspacePreview, workspaceTreeEntries } from '../src/shared/workspace-display.ts'
 import { appendWorkspaceDirectory, workspaceDirectory, workspaceFile, workspacePath, workspaceRoot } from '../src/shared/workspace-model.ts'
 const target = { scope: { kind: 'bot' as const, botId: 'bot-a' }, sessionId: 'part-a' }
 const root = { rootId: 'root-a', sessionId: 'part-a', expiresAt: 1000, maxFileBytes: 256 * 1024, pageSize: 64, writable: true }
@@ -37,4 +38,23 @@ test('脱敏预览保持只读事实，矛盾编辑标记与损坏回包拒绝',
   assert.equal(workspaceFile(shown, root, 'readme.txt').editable, false)
   assert.throws(() => workspaceFile({ ...shown, editable: true }, root, 'readme.txt'))
   assert.throws(() => workspaceFile({ ok: true }, root, 'readme.txt'))
+})
+test('远程目录适配原文件树保留完整相对路径、文件种类和未知大小', () => {
+  const page = workspaceDirectory({ schema: 1, rootId: root.rootId, path: 'src', filtered: false, cursor: null,
+    entries: [{ name: '__proto__', type: 'directory' }, { name: '文件.ts', type: 'file', size: 32 }] }, root, 'src')
+  assert.deepEqual(workspaceTreeEntries(page), [
+    { name: '__proto__', kind: 'dir', path: 'src/__proto__', size: null },
+    { name: '文件.ts', kind: 'file', path: 'src/文件.ts', size: 32 },
+  ])
+  assert.equal(page.entries[0].type, 'directory')
+})
+test('原预览仅接已验证文本，Markdown与表格可呈现，HTML和SVG保持源码', () => {
+  for (const [path, kind, language] of [['README.md', 'markdown', 'markdown'], ['data.tsv', 'table', ''], ['src/a.ts', 'code', 'typescript'], ['index.html', 'code', 'xml'], ['image.svg', 'code', 'xml'], ['constructor', 'text', ''], ['x.__proto__', 'text', '']]) {
+    const parsed = workspaceFile({ ...file(), path, text: '原文\r\n' }, root, path)
+    const preview = workspacePreview(parsed)
+    assert.equal(preview.kind, kind); assert.equal(preview.language, language)
+    assert.equal(preview.text, '原文\r\n'); assert.equal(preview.size, 8)
+    assert.equal(Object.hasOwn(preview, 'receiptId'), false)
+    assert.equal(Object.hasOwn(preview, 'base64'), false)
+  }
 })

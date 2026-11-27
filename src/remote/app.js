@@ -8,6 +8,7 @@ import { resetExtraReads } from '../shared/extra-read-model.ts'
 import { sessionResourceTarget } from '../shared/resource-model.ts'
 import { ResourceContext } from './resource-read.js'
 import { ResourceEntries } from './resource-entry.js'
+import { useRemoteWorkspace } from './workspace-panel.js'
 import { WorkspaceDraftShelf } from './workspace-editor.js'
 import { AttachmentDraftShelf } from './composer-attachments.js'
 import { HeaderPill } from '@dsbot/client/header.js'
@@ -53,7 +54,8 @@ export function App() {
   const localeReady = useDeckLocale(status.uiLanguage ?? 'zh')
   const cachedRef = useRef(true)
   cachedRef.current = status.cached || feedLost
-  const views = { ...hooks, actions, useFrame, useSidebarPref: useHiddenSidebar }
+  const { workspace, openWorkspace } = useRemoteWorkspace({ team, roster, shown, cached: status.cached || feedLost, epoch: resourceEpoch })
+  const views = { ...hooks, actions, useFrame, useSidebarPref: useHiddenSidebar, workspace }
   useDeckTheme(status.uiTheme, roster.prefs)
   useEffect(() => team.start(), [team])
   useEffect(() => {
@@ -116,7 +118,7 @@ export function App() {
   }
   const visibleShown = shown && (roster.byId[shown] || roster.roomsById[shown]) ? shown : null
   if (!localeReady) return null
-  return h(ResourceContext.Provider, { value: { roster, cached, mode: status.mode, epoch: resourceEpoch, selection: shown, actions } }, h('div', { className: 'deck-remote-frame' },
+  return h(ResourceContext.Provider, { value: { roster, cached, mode: status.mode, epoch: resourceEpoch, selection: shown, actions, openWorkspace } }, h('div', { className: 'deck-remote-frame' },
     cached ? h('div', { className: 'deck-cache-banner', role: 'status' }, `${status.alias} · 缓存 · 完成状态待确认`, status.error ? h('span', null, status.error) : null) : null,
     h('fieldset', { className: 'deck-remote-controls', disabled: cached },
       h('main', { className: 'dsb-main dsb_centerCol' },

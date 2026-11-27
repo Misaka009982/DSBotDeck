@@ -79,7 +79,7 @@ export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   if (specifier === '@dsbotdeck/tool-refresh') return path.join(clientRoot, 'src/shared/tool-refresh.ts')
   if (importer === BOOTSTRAP_ID && specifier.startsWith('.')) return path.resolve(path.dirname(main), specifier)
   if (specifier === './app.js' && slash(importer ?? '') === slash(main)) return path.join(clientRoot, 'src/remote/app.js')
-  if (specifier === './dsh-primitives.js' && slash(importer ?? '').startsWith(`${slash(sourceRoot)}/ds-bot/src/client/`)) {
+  if (importer && specifier.startsWith('.') && slash(path.resolve(path.dirname(importer), specifier)) === slash(path.join(sourceRoot, 'ds-bot/src/client/dsh-primitives.js'))) {
     return path.join(sourceRoot, 'app/ui/src/primitives.js')
   }
   for (const [prefix, folder] of [['@dsbot/client/', 'ds-bot/src/client/'], ['@dsbot/ui/', 'app/ui/src/']]) {

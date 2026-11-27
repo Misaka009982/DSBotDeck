@@ -12,9 +12,10 @@ export function onResourceDenied(listener) { denials.addEventListener('refused',
 export function useResourceContext(module) {
   const context = useContext(ResourceContext)
   const visible = useDetailAvailability()
-  const access = moduleAccess(context.roster?.extras, module)
+  const rawAccess = moduleAccess(context.roster?.extras, module)
+  const access = { ...rawAccess, write: rawAccess.write && context.roster?.readOnly !== true }
   return { ...context, access, available: visible && !context.cached && access.state === 'ready',
-    boundary: JSON.stringify([context.epoch, context.selection, context.cached, visible, resourcePermissions(context.roster?.extras)]),
+    boundary: JSON.stringify([context.epoch, context.selection, context.cached, visible, context.roster?.readOnly, resourcePermissions(context.roster?.extras)]),
     reason: !visible || context.cached ? '缓存或隐藏期间不读取资源正文。' : moduleAccessText(access) }
 }
 export function useResourceRead({ identity, enabled, node, read, merge = (_previous, next) => next }) {

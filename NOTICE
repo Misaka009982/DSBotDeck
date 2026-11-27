@@ -27,6 +27,10 @@ src/remote/tool-steps.js、tool-detail.js 与纯呈现模型独立实现气泡�
 src/remote/private-goal.js 独立适配已核对的私聊目标协议，在原 Bot 设置
 Card 中显示目标和控制，由当前私聊的 /goal 按需打开；目标仍由服务器执行。
 src/remote/peer-event.js 只适配服务器公开来源；原交换和详情仍由上游组件显示。
+src/remote/workspace-panel.js 与 workspace-pane.js 把远程资源接入原 BotPanel、
+PanelStrip、TreeBranch 与 FilePreview；终端布局改编自原 workspace-terminal.js，
+配色直接复用 readXtermTheme。只读提取在构建内存进行，保留原作者与许可；
+远程句柄、分页、保存与 PTY 输入仍使用 Deck 已核对的增补协议。
 图标与宠物的 BotMark 使用 DS-Bot 自有素材，仅说明所连接的产品。
 默认应用图标从上游 characterMarkup 的 star/aurora 原五角星渐变生成，
 本项目只在自身构建目录输出 PNG/ICO，不复制素材表或改写上游资源。

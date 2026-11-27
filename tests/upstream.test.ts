@@ -190,6 +190,8 @@ test('UI 接入只替换入口与 primitives', () => {
   assert.equal(adaptUiSource('./app.js', main, client, source), path.join(client, 'src/remote/app.js'))
   assert.equal(adaptUiSource('./chat.js', path.join(source, 'app/ui/src/app.js'), client, source), null)
   assert.equal(adaptUiSource('./dsh-primitives.js', path.join(source, 'ds-bot/src/client/cells.js'), client, source), path.join(source, 'app/ui/src/primitives.js'))
+  assert.equal(adaptUiSource('../../../ds-bot/src/client/dsh-primitives.js', path.join(source, 'app/ui/src/file-preview.js'), client, source), path.join(source, 'app/ui/src/primitives.js'))
+  assert.equal(adaptUiSource('./dsh-primitives.js', path.join(source, 'app/ui/src/file-preview.js'), client, source), null)
   assert.equal(adaptUiSource('@dsbot/bootstrap', undefined, client, source), BOOTSTRAP_ID)
   assert.equal(adaptUiSource('@dsbot/themes', undefined, client, source), path.join(source, 'ds-bot/src/client/themes.js'))
 })
@@ -387,6 +389,39 @@ test('新版分页投影保留群成员与附件，刷新最新页不丢已加�
   assert.deepEqual(JSON.parse(JSON.stringify(member.presented)), [file])
   assert.ok(remoteRead.includes('if (rejected.current) return'))
   assert.ok(remoteRead.includes('request.current?.abort()'))
+})
+test('原文件树和终端主题按固定源码提取，保留展开与选中语义且不携带本机传输', async () => {
+  const name = 'app/ui/src/right-panel.js'
+  const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+  const next = paintSource(raw, path.join(source, name), source) ?? ''
+  const picked: string[] = []
+  const helpers = runInNewContext(`${next.replace(/^import .+$/gm, '').replace(/^export /gm, '')}\n({ TreeBranch, buildWorkspaceTabs })`, {
+    h: (type: unknown, props: unknown, ...children: unknown[]) => ({ type, props, children }),
+    t: (text: string) => text, fileSizeText: (bytes: number) => String(bytes),
+    ChevronRightIcon: 'chevron', FolderIcon: 'folder', FileIcon: 'file', DiffIcon: 'diff', TerminalIcon: 'terminal',
+  })
+  const args = { entries: [{ name: 'src', path: 'src', kind: 'dir' }], depth: 0, ancestors: new Set(), expanded: new Set(),
+    childrenByPath: { src: [{ name: 'a.ts', path: 'src/a.ts', kind: 'file', size: 0 }] }, loadingDirs: new Set(),
+    selectedPath: 'src/a.ts', filter: '', onToggleDir: (path: string) => picked.push(path), onSelectFile: (path: string) => picked.push(path) }
+  const collapsed = helpers.TreeBranch(args)
+  assert.equal(collapsed.length, 1); assert.equal(collapsed[0].props['aria-expanded'], false)
+  collapsed[0].props.onClick(); assert.deepEqual(picked, ['src'])
+  const expanded = helpers.TreeBranch({ ...args, expanded: new Set(['src']) })
+  assert.equal(expanded.length, 2); assert.equal(expanded[0].props['aria-expanded'], true)
+  assert.equal(expanded[1].props['aria-current'], 'true'); assert.equal(expanded[1].props.style.paddingLeft, '40px')
+  expanded[1].props.onClick(); assert.deepEqual(picked, ['src', 'src/a.ts'])
+  const tabs = helpers.buildWorkspaceTabs({ tabs: ['files', 'preview', 'terminal'], file: 'src/a.ts' })
+  assert.deepEqual(JSON.parse(JSON.stringify(tabs)).map((tab: { id: string }) => tab.id), ['files', 'preview', 'terminal'])
+  assert.equal(next.includes("call('workspace-"), false); assert.equal(next.includes('workspace-watch'), false)
+  const terminalName = 'app/ui/src/workspace-terminal.js'
+  const terminalRaw = await readFile(new URL(`../../DS-Bot/${terminalName}`, import.meta.url), 'utf8')
+  const terminal = paintSource(terminalRaw, path.join(source, terminalName), source) ?? ''
+  assert.ok(terminal.includes('export function readXtermTheme()')); assert.equal(terminal.includes("call('terminal-"), false)
+  assert.equal(terminal.includes("from './shortcuts.js'"), false)
+  for (const [fileName, text] of [[name, next], [terminalName, terminal]]) {
+    const parsed = ts.transpileModule(text, { fileName, reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, allowJs: true } })
+    assert.deepEqual(parsed.diagnostics ?? [], [])
+  }
 })
 test('安装包依赖不带 DSH 与本地运行引擎', async () => {
   const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))

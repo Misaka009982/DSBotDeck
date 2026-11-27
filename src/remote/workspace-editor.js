@@ -67,7 +67,7 @@ export function WorkspaceEditor({ target, root, path, onClose }) {
   const canSave = draft?.status === 'editing' && draft.dirty && context.access.write && reader.value?.editable && draft.receipt?.rootId === root.rootId && Date.now() < root.expiresAt
   return h('div', { ref: node, className: 'deck-workspace-editor' },
     h('div', { className: 'deck-resource-heading' }, h('strong', null, `编辑 · ${path}`), h('button', { type: 'button', className: 'bt-soft', onClick: onClose }, '收起编辑')),
-    h('p', { className: 'deck-resource-note' }, '按服务器版本与单次回执保存。外部程序并发写入的最后竞争窗口仍取决于服务器后端；未保存内容仅保留在本次客户端内存。'),
+    h('p', { className: 'deck-resource-note' }, '未保存的编辑仅保留在本次客户端中；关闭面板后可从草稿栏取回。'),
     h(ReadState, { reader }), error ? h('p', { className: 'deck-resource-error', role: 'alert' }, error) : null,
     draft && workspaceDrafts.get(target, path) === draft && available ? h('div', null,
       h('p', { className: 'deck-resource-note', role: 'status' }, STATUS[draft.status], ` · ${draft.newline === '\r\n' ? 'CRLF' : 'LF'}`),

@@ -3,8 +3,7 @@ import { createElement as h, useContext, useState } from 'react'
 import { currentResourceSession, moduleAccess, resourceId } from '../shared/resource-model.ts'
 import { ResourceContext, ResourcePanel } from './resource-read.js'
 import { Delegations } from './delegations.js'
-import { WorkspacePane } from './workspace-pane.js'
-import { TerminalPane } from './terminal-pane.js'
+import { FolderIcon, TerminalIcon } from '@dsbot/client/icons.js'
 import './resource-pane.css'
 export function ResourceEntries({ target }) {
   const context = useContext(ResourceContext)
@@ -21,10 +20,9 @@ export function ResourceEntries({ target }) {
   return h('div', { className: 'deck-resource-entry' },
     h('div', { className: 'deck-resource-actions', role: 'group', 'aria-label': '当前会话资源' },
       delegations.state !== 'missing' ? h('button', { type: 'button', className: 'bt-soft', 'aria-expanded': selected === 'delegations', onClick: () => toggle('delegations') }, '委派过程') : null,
-      showFiles ? h('button', { type: 'button', className: 'bt-soft', 'aria-expanded': selected === 'workspace', onClick: () => toggle('workspace') }, '工作区文件') : null,
-      terminals.state !== 'missing' ? h('button', { type: 'button', className: 'bt-soft', 'aria-expanded': selected === 'terminals', onClick: () => toggle('terminals') }, '服务器终端') : null),
-    selected ? h(ResourcePanel, { key: JSON.stringify([identity, selected, context.cached, delegations.state, workspace.state, terminals.state]), title: selected === 'delegations' ? '委派过程' : selected === 'terminals' ? '服务器终端' : '工作区文件', onClose: () => setOpened(null) },
-      selected === 'delegations' ? h(Delegations, { target }) : selected === 'terminals' ? h(TerminalPane, { target }) : h(WorkspacePane, { target })) : null)
+      showFiles ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => context.openWorkspace?.(target, 'workspace') }, h(FolderIcon), '文件') : null,
+      terminals.state !== 'missing' ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => context.openWorkspace?.(target, 'terminals') }, h(TerminalIcon), '终端') : null),
+    selected === 'delegations' ? h(ResourcePanel, { key: JSON.stringify([identity, context.cached, delegations.state]), title: '委派过程', onClose: () => setOpened(null) }, h(Delegations, { target })) : null)
 }
 export function TaskResourceEntries({ botId, taskId, sessionId }) {
   return resourceId(botId) && resourceId(taskId) && resourceId(sessionId)

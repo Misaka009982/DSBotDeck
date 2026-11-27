@@ -4,6 +4,10 @@ import { createElement as h, useLayoutEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { call } from '@dsbot/client/api.js'
+import { CloseIcon, PlusIcon, TerminalIcon } from '@dsbot/client/icons.js'
+import { readXtermTheme } from '@dsbot/ui/workspace-terminal.js'
+import { RefreshIcon } from '@dsbot/ui/right-panel.js'
+import { writeClipboard } from '@dsbot/ui/primitives.js'
 import { currentResourceSession, resourceAccessFailure, resourceFailure, ScopedResourceRead } from '../shared/resource-model.ts'
 import { TerminalControl, terminalClosed, terminalCreated, terminalDimensions, terminalInput, terminalList, terminalPage, TERMINAL_STATUSES } from '../shared/terminal-model.ts'
 import { onResourceDenied, rejectResourceReads, ReadState, useResourceContext, useResourceRead } from './resource-read.js'
@@ -39,15 +43,24 @@ function TerminalScreen({ handle }) {
     setView(handle); setError(null); setNotice(null)
     if (!context.available || !node.current) return
     let alive = true; let timer; let offset = 0; let queued = ''; let resize = null; let sending = false; let halted = false; let disposed = false
+    let requestedSize = { cols: handle.cols, rows: handle.rows }
     const controller = new AbortController(); const lease = new ScopedResourceRead(); const fit = new FitAddon()
     let control
     try { control = controllerOf(handle) } catch { setError('本视图的终端状态预算已满，请先明确关闭旧终端。'); return }
     const current = () => alive && active.current.identity === identity && active.current.available && visible(node.current) && Date.now() < handle.expiresAt
     const writeAllowed = () => current() && active.current.write && !halted
-    const terminal = new Terminal({ cols: handle.cols, rows: handle.rows, scrollback: 1500, disableStdin: true, cursorBlink: false,
-      fontSize: 13, screenReaderMode: true, logLevel: 'off', windowOptions: {}, altClickMovesCursor: false,
+    const { theme, fontFamily } = readXtermTheme()
+    const terminal = new Terminal({ cols: handle.cols, rows: handle.rows, scrollback: 1500, disableStdin: true, cursorBlink: true, cursorStyle: 'bar',
+      fontSize: 12.5, lineHeight: 1.4, fontFamily, theme, screenReaderMode: true, logLevel: 'off', windowOptions: {}, altClickMovesCursor: false,
       linkHandler: { activate: () => {}, allowNonHttpProtocols: false } })
     terminal.loadAddon(fit); terminal.open(node.current)
+    terminal.attachCustomKeyEventHandler(event => {
+      if (event.type === 'keydown' && event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey) {
+        if (event.code === 'KeyC' && terminal.hasSelection()) { event.preventDefault(); if (current()) void writeClipboard(terminal.getSelection()); return false }
+        if (event.code === 'KeyV') return false
+      }
+      return true
+    })
     const subscriptions = [0, 1, 2, 8, 52, 1337].map(id => terminal.parser.registerOscHandler(id, () => true))
     subscriptions.push(terminal.parser.registerCsiHandler({ final: 't' }, () => true))
     const paintControl = () => {
@@ -118,29 +131,48 @@ function TerminalScreen({ handle }) {
     const expiry = setTimeout(() => { if (alive) stopReading('终端操作句柄已过期，请刷新目录取得新句柄。') }, Math.max(0, Math.min(600000, handle.expiresAt - Date.now())))
     actions.current = {
       fit: () => {
-        if (!writeAllowed() || !control.canSend) return
+        if (!writeAllowed() || !control.acceptsInput) return
         const proposed = fit.proposeDimensions()
         if (!proposed || !terminalDimensions(proposed.cols, proposed.rows)) { setNotice('当前可见区域不足以调整终端尺寸。'); return }
-        resize = proposed; void sendQueued()
+        if (proposed.cols === requestedSize.cols && proposed.rows === requestedSize.rows) return
+        requestedSize = proposed; resize = proposed; void sendQueued()
       },
+      clear: () => { if (current() && !halted) terminal.clear() },
       focus: () => { if (current() && !halted) terminal.focus() },
     }
-    paintControl(); void poll()
+    let fitFrame = 0; let themeFrame = 0
+    const scheduleFit = () => { cancelAnimationFrame(fitFrame); fitFrame = requestAnimationFrame(() => { if (!disposed) actions.current?.fit() }) }
+    const resizeObserver = new ResizeObserver(scheduleFit); resizeObserver.observe(node.current)
+    const themeObserver = new MutationObserver(() => {
+      cancelAnimationFrame(themeFrame)
+      themeFrame = requestAnimationFrame(() => {
+        if (disposed) return
+        const next = readXtermTheme(); terminal.options.theme = next.theme; terminal.options.fontFamily = next.fontFamily; scheduleFit()
+      })
+    })
+    themeObserver.observe(document.documentElement, { attributes: true })
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style', 'class'] })
+    themeObserver.observe(document.head, { childList: true, subtree: true, characterData: true })
+    paintControl(); void poll(); scheduleFit()
     return () => {
+      resizeObserver.disconnect(); themeObserver.disconnect(); cancelAnimationFrame(fitFrame); cancelAnimationFrame(themeFrame)
       alive = false; queued = ''; resize = null; actions.current = null; clearTimeout(timer); clearTimeout(expiry); offDenied(); lease.cancel()
       if (control.state === 'sending') control.uncertain()
       controller.abort(); disposeTerminal()
     }
   }, [identity, context.available])
-  return h('div', { className: 'deck-terminal-session' },
-    h('div', { className: 'deck-resource-heading' }, h('span', null, TERMINAL_STATUSES[view.status], view.exitCode === null ? '' : ` · 退出码 ${view.exitCode}`),
-      h('button', { type: 'button', className: 'bt-soft', disabled: !context.available || !context.access.write || !view.writable || controlState !== 'ready', onClick: () => actions.current?.fit() }, '适配窗口尺寸'),
-      h('button', { type: 'button', className: 'bt-soft', disabled: !context.available, onClick: () => setRetry(value => value + 1) }, '重新核对输出')),
-    h('p', { className: 'deck-resource-note' }, !context.access.write || !view.writable ? '只读观察，不改变终端输入权。' : controlState === 'unknown' || controlState === 'pending' ? '控制结果待确认，输入暂停；不会重放。' : '输入会发送到服务器本设备创建的终端。'),
-    notice ? h('p', { role: 'status', className: 'deck-resource-note' }, notice) : null,
-    error ? h('p', { role: 'alert', className: 'deck-resource-error' }, error) : null,
-    view.error ? h('p', { className: 'deck-resource-error' }, '服务器报告输出或进程异常，请核对状态；退出码未知时不会推断成功。') : null,
-    h('div', { ref: node, className: 'deck-terminal-screen', role: 'group', 'aria-label': '服务器用户终端', onClick: () => actions.current?.focus() }))
+  return h('div', { className: 'dsb-term-stage' },
+    h('div', { className: 'dsb-term-cwd-bar' }, h('span', { className: 'dsb-term-cwd', title: handle.terminalId }, TERMINAL_STATUSES[view.status], view.exitCode === null ? '' : ` · 退出码 ${view.exitCode}`),
+      h('div', { className: 'dsb-term-actions' },
+        h('button', { type: 'button', className: 'dsb-term-act-btn', disabled: !context.available, onClick: () => actions.current?.clear() }, '清屏'),
+        h('button', { type: 'button', className: 'dsb-term-act-ico', disabled: !context.available, title: '重新核对输出', 'aria-label': '重新核对输出', onClick: () => setRetry(value => value + 1) }, h(RefreshIcon)))),
+    !context.access.write || !view.writable ? h('p', { className: 'dsb-pv-note' }, '只读终端')
+      : controlState === 'unknown' || controlState === 'pending' ? h('p', { className: 'dsb-pv-note' }, '上次输入结果待确认，输入已暂停。') : null,
+    notice ? h('p', { role: 'status', className: 'dsb-pv-note' }, notice) : null,
+    error ? h('p', { role: 'alert', className: 'dsb-rp-error' }, error) : null,
+    view.error ? h('p', { className: 'dsb-rp-error' }, '服务器报告输出或进程异常。') : null,
+    h('div', { className: 'dsb-term-pane', onKeyDown: event => { if (event.key === 'Escape') event.stopPropagation() } },
+      h('div', { ref: node, className: 'dsb-term-host deck-terminal-screen', role: 'group', 'aria-label': '服务器用户终端', onClick: () => actions.current?.focus() })))
 }
 export function TerminalPane({ target }) {
   const context = useResourceContext('terminals'); const node = useRef(null); const action = useRef(null); const latest = useRef(null)
@@ -170,29 +202,37 @@ export function TerminalPane({ target }) {
       if (resourceAccessFailure(error)) rejectResourceReads()
     } finally { if (action.current === controller) { action.current = null; setBusy(false) } }
   }
-  const list = reader.value?.items ?? []; const chosen = list.find(item => item.terminalId === selected)
-  return h('div', { ref: node },
-    h('p', { className: 'deck-resource-note' }, '服务器用户终端。关闭面板保留远程进程；明确关闭请进入“本设备终端”。输出可能包含敏感内容。'),
-    context.reason ? h('p', { className: 'deck-resource-note' }, context.reason) : null,
-    h('div', { className: 'deck-resource-heading' },
-      h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => { setSelected(null); setOwned(value => !value) } }, owned ? '返回当前会话' : '本设备终端'),
-      h('button', { type: 'button', className: 'bt-soft', disabled: busy || reader.busy || !context.available, onClick: reader.reload }, '刷新目录'),
-      !owned && current ? h('button', { type: 'button', className: 'bt-soft', disabled: busy || !context.available || !context.access.write,
-        onClick: () => { void mutate('extra-terminal-create', { ...target, requestId: crypto.randomUUID(), cols: 80, rows: 24 }, raw => { const created = terminalCreated(raw, target); setSelected(created.terminalId); setMessage('服务器已创建用户终端。') }) } }, '创建服务器终端') : null),
-    !current && !owned ? h('p', { className: 'deck-resource-note' }, '原会话已变化；可在本设备终端目录明确关闭旧终端。') : null,
-    busy ? h('p', { role: 'status', className: 'deck-resource-note' }, '等待服务器确认…') : null,
-    message ? h('p', { role: 'status', className: 'deck-resource-note' }, message) : null,
+  const list = reader.value?.items ?? []; const chosen = list.find(item => item.terminalId === selected) ?? list[0]
+  const create = () => { void mutate('extra-terminal-create', { ...target, requestId: crypto.randomUUID(), cols: 80, rows: 24 }, raw => {
+    const created = terminalCreated(raw, target); setSelected(created.terminalId)
+  }) }
+  return h('div', { ref: node, className: 'dsb-term' },
+    h('div', { className: 'dsb-term-bar' },
+      !owned ? h('div', { className: 'dsb-term-tabs', role: 'tablist', 'aria-label': '服务器终端' }, list.map((item, index) => h('div', {
+        key: item.terminalId, className: 'dsb-term-tab', 'data-active': chosen?.terminalId === item.terminalId || undefined,
+      }, h('button', { type: 'button', role: 'tab', className: 'dsb-term-tab-btn', 'aria-selected': chosen?.terminalId === item.terminalId,
+        title: `${item.terminalId} · ${TERMINAL_STATUSES[item.status]}`, onClick: () => setSelected(item.terminalId) },
+        h(TerminalIcon), h('span', null, `终端 ${index + 1}`), item.exitCode === null ? null : h('span', { className: 'dsb-term-exit' }, item.exitCode))))) : h('span', { className: 'dsb-ft-root' }, '本设备终端'),
+      h('div', { className: 'dsb-term-actions' },
+        h('button', { type: 'button', className: 'dsb-term-act-btn', disabled: busy, onClick: () => { setSelected(null); setOwned(value => !value) } }, owned ? '返回' : '管理'),
+        h('button', { type: 'button', className: 'dsb-term-act-ico', title: '刷新终端', 'aria-label': '刷新终端', disabled: busy || reader.busy || !context.available, onClick: reader.reload }, h(RefreshIcon)),
+        !owned && current ? h('button', { type: 'button', className: 'dsb-term-act-ico', title: '新建终端', 'aria-label': '新建终端', disabled: busy || !context.available || !context.access.write, onClick: create }, h(PlusIcon)) : null)),
+    context.reason ? h('p', { className: 'dsb-pv-note' }, context.reason) : null,
+    !current && !owned ? h('p', { className: 'dsb-pv-note' }, '原会话已变化；可在管理中关闭旧终端。') : null,
+    busy ? h('p', { role: 'status', className: 'dsb-pv-note' }, '等待服务器确认…') : null,
+    message ? h('p', { role: 'status', className: 'dsb-pv-note' }, message) : null,
     h(ReadState, { reader }),
-    reader.value && list.length === 0 ? h('p', { className: 'deck-resource-note' }, '此目录没有尚未关闭的用户终端。') : null,
-    h('ul', { className: 'deck-workspace-entries' }, list.map(item => h('li', { key: item.terminalId },
-      owned ? h('span', null, `${item.terminalId} · ${TERMINAL_STATUSES[item.status]}`)
-        : h('button', { type: 'button', className: 'bt-soft', 'aria-pressed': selected === item.terminalId, onClick: () => setSelected(item.terminalId) }, `${item.terminalId} · ${TERMINAL_STATUSES[item.status]}`),
-      owned ? h('button', { type: 'button', className: 'bt-soft', disabled: busy || !context.available || !context.access.write,
-        onClick: () => setConfirmClose(item.terminalId) }, '关闭此终端') : null))),
+    reader.value && list.length === 0 ? h('div', { className: 'dsb-rp-empty' }, h(TerminalIcon), h('p', null, '没有打开的终端'),
+      !owned && current && context.access.write ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: create }, '新建终端') : null) : null,
+    owned ? h('div', { className: 'dsb-ft-list' }, list.map((item, index) => h('div', { key: item.terminalId, className: 'dsb-term-bar' },
+      h('span', { className: 'dsb-ft-name', title: item.terminalId }, `终端 ${index + 1} · ${TERMINAL_STATUSES[item.status]}`),
+      h('button', { type: 'button', className: 'dsb-term-act-ico', title: '结束此终端进程', 'aria-label': `结束终端 ${index + 1}`, disabled: busy || !context.available || !context.access.write,
+        onClick: () => setConfirmClose(item.terminalId) }, h(CloseIcon))))) : null,
     owned && confirmClose ? h('div', { className: 'deck-resource-confirm' }, h('p', null, '确认结束此用户终端及其进程？'),
-      h('button', { type: 'button', className: 'bt-soft', disabled: busy, onClick: () => {
+      h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: busy, onClick: () => {
         const handle = list.find(item => item.terminalId === confirmClose)
         if (handle) void mutate('extra-terminal-close', { handleId: handle.handleId }, raw => { terminalClosed(raw, handle.terminalId); controls.delete(handle.terminalId); setConfirmClose(null); setMessage('服务器已确认关闭。') })
-      } }, '确认关闭'), h('button', { type: 'button', className: 'bt-soft', onClick: () => setConfirmClose(null) }, '取消')) : null,
-    !owned && chosen && context.available ? h(TerminalScreen, { key: JSON.stringify([boundary, chosen.handleId]), handle: chosen }) : null)
+      } }, '确认关闭'), h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => setConfirmClose(null) }, '取消')) : null,
+    !owned && chosen && context.available ? h(TerminalScreen, { key: JSON.stringify([boundary, chosen.handleId]), handle: chosen }) : null,
+    h('p', { className: 'dsb-pv-note deck-terminal-foot' }, '关闭面板保留进程，结束进程请使用“管理”。'))
 }

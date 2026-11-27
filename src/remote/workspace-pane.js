@@ -1,67 +1,95 @@
 // SPDX-License-Identifier: Apache-2.0
+// 文件树行、图标、预览与样式来自固定上游；这里只承接远程授权和分页。
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { call } from '@dsbot/client/api.js'
+import { SearchIcon } from '@dsbot/client/icons.js'
+import { FilePreview as UpstreamPreview } from '@dsbot/ui/file-preview.js'
+import { RefreshIcon, TreeBranch } from '@dsbot/ui/right-panel.js'
 import { currentResourceSession } from '../shared/resource-model.ts'
 import { appendWorkspaceDirectory, workspaceDirectory, workspaceFile, workspaceRoot } from '../shared/workspace-model.ts'
+import { workspacePreview, workspaceTreeEntries } from '../shared/workspace-display.ts'
 import { WorkspaceEditor, workspaceDrafts } from './workspace-editor.js'
 import { ReadState, useResourceContext, useResourceRead } from './resource-read.js'
-function FilePreview({ target, root, path, enabled }) {
+function FilePreview({ target, root, path, enabled, line }) {
   const context = useResourceContext('workspace'); const node = useRef(null)
   const [editing, setEditing] = useState(() => workspaceDrafts.get(target, path) !== undefined)
   const reader = useResourceRead({ identity: JSON.stringify([context.boundary, root.rootId, path]), enabled: enabled && context.available && Date.now() < root.expiresAt, node,
     read: async (_cursor, signal) => workspaceFile(await call('extra-workspace-read', { rootId: root.rootId, path,
       ...(context.roster?.extras?.workspace?.readOnlyPreview === true ? { readOnly: true } : {}) }, signal), root, path) })
   const file = reader.value
-  return h('div', { ref: node, className: 'deck-workspace-preview' }, h(ReadState, { reader }),
-    file ? h('div', null, h('strong', null, file.path),
-      h('p', { className: 'deck-resource-note' }, '服务器当前文件 · 完整 UTF-8 文本 · 只读预览', file.redacted ? ' · 已遮盖敏感内容' : ''),
-      h('pre', { tabIndex: 0 }, file.text === '' ? '（空文件）' : file.text),
-      h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: reader.reload }, '重新读取当前文件'),
-      !file.redacted && root.writable && context.access.write ? h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: () => setEditing(true) }, '编辑文件') : null) : null,
-    editing && context.available ? h(WorkspaceEditor, { target, root, path, onClose: () => setEditing(false) }) : null)
+  return h('div', { ref: node, className: 'deck-workspace-preview' },
+    file ? h('div', { className: 'dsb-ft-bar' },
+      h('span', { className: 'deck-resource-note' }, file.redacted ? '只读 · 已遮盖敏感内容' : '服务器当前文件'),
+      h('div', { className: 'dsb-ft-actions' },
+        !file.redacted && root.writable && context.access.write ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', disabled: reader.busy, onClick: () => setEditing(value => !value) }, editing ? '预览' : '编辑') : null,
+        h('button', { type: 'button', className: 'bt-icon-btn', disabled: reader.busy, title: '重新读取文件', 'aria-label': '重新读取文件', onClick: reader.reload }, h(RefreshIcon)))) : null,
+    editing && enabled && context.available && file ? h(WorkspaceEditor, { target, root, path, onClose: () => { setEditing(false); reader.reload() } })
+      : h(UpstreamPreview, { key: JSON.stringify([root.rootId, path, !!file]), file: file ? workspacePreview(file) : null, line, loading: reader.busy, error: reader.error, onRetry: reader.reload }))
 }
-function Directory({ target, root, enabled }) {
+function DirectoryRows({ root, path = '', depth = 0, expanded, toggle, selected, onOpenFile, filter, showHidden, enabled }) {
   const context = useResourceContext('workspace'); const node = useRef(null)
-  const [path, setPath] = useState(''); const [file, setFile] = useState(null)
   const reader = useResourceRead({ identity: JSON.stringify([context.boundary, root.rootId, path]), enabled: enabled && context.available && Date.now() < root.expiresAt, node,
     read: async (cursor, signal) => workspaceDirectory(await call('extra-workspace-list', { rootId: root.rootId, path, ...(cursor ? { cursor } : {}) }, signal), root, path, cursor),
     merge: appendWorkspaceDirectory })
   const page = reader.value
-  const open = next => { setFile(null); setPath(next) }
-  return h('div', { ref: node },
-    h('div', { className: 'deck-resource-heading' }, h('strong', null, path || '工作区根目录'),
-      path ? h('button', { type: 'button', className: 'bt-soft', onClick: () => open(path.split('/').slice(0, -1).join('/')) }, '上一级') : null,
-      h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: () => { setFile(null); reader.reload() } }, '刷新目录')),
-    h(ReadState, { reader }), page ? h('div', null,
-      h('ul', { className: 'deck-workspace-entries' }, page.entries.map(entry => {
-        const next = path ? `${path}/${entry.name}` : entry.name
-        return h('li', { key: entry.name }, h('button', { type: 'button', className: 'bt-soft', onClick: () => entry.type === 'directory' ? open(next) : setFile(next), 'aria-pressed': entry.type === 'file' ? file === next : undefined },
-          entry.type === 'directory' ? '目录 · ' : '文件 · ', entry.name), entry.size === null || entry.type !== 'file' ? null : h('span', { className: 'deck-resource-note' }, `${entry.size} B`))
-      })),
-      page.entries.length === 0 ? h('p', { className: 'deck-resource-note' }, page.filtered ? '本目录没有可公开的条目。' : '目录为空。') : null,
-      page.filtered ? h('p', { className: 'deck-resource-note' }, '服务器已过滤受保护或不可用的条目。') : null,
-      page.cursor && !page.limited ? h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: () => reader.more(page.cursor) }, '更多条目') : null,
-      page.limited ? h('p', { className: 'deck-resource-note' }, '目录展示达到 4096 项上限。') : null) : null,
-    file && page ? h(FilePreview, { key: `${root.rootId}:${file}`, target, root, path: file, enabled }) : null)
+  const entries = page ? workspaceTreeEntries(page).filter(entry => showHidden || !entry.name.startsWith('.')) : []
+  return h('div', { ref: node, role: path ? 'group' : undefined, className: 'deck-tree-branch' },
+    h(ReadState, { reader }), entries.map(entry => h('div', { key: entry.path },
+      // 原行组件承担箭头、缩进、图标、省略号和选中态；展开的目录单独持有分页与取消句柄。
+      h(TreeBranch, { entries: [entry], depth, ancestors: new Set(), expanded, childrenByPath: {}, loadingDirs: new Set(),
+        selectedPath: selected, filter: entry.kind === 'dir' ? '' : filter, onToggleDir: toggle, onSelectFile: onOpenFile,
+        onContextMenu: () => {} }),
+      entry.kind === 'dir' && expanded.has(entry.path) && depth < 31 ? h(DirectoryRows, { root, path: entry.path, depth: depth + 1, expanded, toggle, selected, onOpenFile, filter, showHidden, enabled }) : null)),
+    page && entries.length === 0 && !reader.busy ? h('p', { className: 'dsb-pv-note' }, page.filtered ? '没有可公开的条目' : '目录为空或条目已隐藏') : null,
+    page?.cursor && !page.limited ? h('button', { type: 'button', className: 'dsb-ft-row deck-tree-more', disabled: reader.busy, style: { paddingLeft: `${26 + depth * 14}px` }, onClick: () => reader.more(page.cursor) }, '加载更多…') : null,
+    page?.limited ? h('p', { className: 'dsb-pv-note' }, '本目录已显示 4096 项') : null)
 }
-export function WorkspacePane({ target, initialPath = null }) {
+function Directory({ root, enabled, selected, onOpenFile }) {
+  const [expanded, setExpanded] = useState(() => new Set()); const [filter, setFilter] = useState(''); const [showHidden, setShowHidden] = useState(false)
+  const [revision, setRevision] = useState(0); const [notice, setNotice] = useState(null)
+  const toggle = path => setExpanded(previous => {
+    const next = new Set(previous)
+    if (next.has(path)) {
+      for (const item of next) if (item === path || item.startsWith(`${path}/`)) next.delete(item)
+    } else if (next.size < 64) next.add(path)
+    else { setNotice('最多同时展开 64 个目录，请先收起部分目录。'); return previous }
+    setNotice(null); return next
+  })
+  return h('div', { className: 'dsb-ft' },
+    h('div', { className: 'dsb-ft-bar' }, h('span', { className: 'dsb-ft-root' }, '工作区'),
+      h('div', { className: 'dsb-ft-actions' },
+        h('button', { type: 'button', className: 'bt-soft bt-soft-sm', 'aria-pressed': showHidden, onClick: () => setShowHidden(value => !value) }, showHidden ? '隐藏点文件' : '显示隐藏文件'),
+        h('button', { type: 'button', className: 'bt-icon-btn', title: '刷新目录', 'aria-label': '刷新目录', onClick: () => setRevision(value => value + 1) }, h(RefreshIcon)))),
+    h('div', { className: 'dsb-ft-search' }, h('span', { className: 'dsb-ft-search-ico', 'aria-hidden': true }, h(SearchIcon)),
+      h('input', { type: 'search', className: 'dsb-ft-search-input', value: filter, placeholder: '筛选已展开文件…', 'aria-label': '筛选已展开文件', onChange: event => setFilter(event.target.value) })),
+    notice ? h('p', { className: 'dsb-pv-note', role: 'status' }, notice) : null,
+    h('div', { className: 'dsb-ft-list', role: 'tree', 'aria-label': '工作区文件' },
+      h(DirectoryRows, { key: revision, root, expanded, toggle, selected, onOpenFile, filter, showHidden, enabled })))
+}
+export function WorkspacePane({ target, initialPath = null, active = true, tab = initialPath ? 'preview' : 'files', onOpenFile, line = null }) {
   const context = useResourceContext('workspace'); const node = useRef(null)
   const current = currentResourceSession(context.roster, target)
-  const reader = useResourceRead({ identity: JSON.stringify([context.boundary, target, current]), enabled: current && context.available, node,
+  const established = useRef(null)
+  const identity = JSON.stringify([context.boundary, target, current])
+  const reader = useResourceRead({ identity, enabled: current && context.available && (active || established.current === identity), node,
     read: async (_cursor, signal) => workspaceRoot(await call('extra-workspace-open', target, signal), target) })
-  const [expired, setExpired] = useState(null)
+  const [expired, setExpired] = useState(null); const [localFile, setLocalFile] = useState(null)
   const root = reader.value
+  if (root) established.current = identity
   useEffect(() => {
     if (!root) return
     const timer = setTimeout(() => setExpired(root.rootId), Math.max(0, Math.min(10 * 60_000, root.expiresAt - Date.now())))
     return () => clearTimeout(timer)
   }, [root])
   const valid = root && expired !== root.rootId && Date.now() < root.expiresAt
-  return h('div', { ref: node },
-    h('p', { className: 'deck-resource-note' }, '浏览当前会话获授权的工作区，单文件最多 256 KiB。文件预览与历史工具修改分别读取。'),
-    context.reason ? h('p', { className: 'deck-resource-note' }, context.reason) : null,
-    !current ? h('p', { className: 'deck-resource-note' }, '历史会话不能用作当前工作区根；请回到当前会话。') : null,
-    h(ReadState, { reader }), root && !valid ? h('p', { className: 'deck-resource-error' }, '工作区句柄已过期。', h('button', { type: 'button', className: 'bt-soft', onClick: reader.reload }, '重新打开工作区')) : null,
-    valid ? initialPath ? h(FilePreview, { key: `${root.rootId}:${initialPath}`, target, root, path: initialPath, enabled: context.available && current })
-      : h(Directory, { key: root.rootId, target, root, enabled: context.available && current }) : null)
+  const selected = initialPath ?? localFile
+  const open = path => { if (onOpenFile) onOpenFile(path); else setLocalFile(path) }
+  return h('div', { ref: node, className: 'dsb-ws-body deck-workspace', hidden: !active },
+    context.reason ? h('p', { className: 'dsb-pv-note' }, context.reason) : null,
+    !current ? h('p', { className: 'dsb-pv-note' }, '请回到当前会话浏览工作区。') : null,
+    h(ReadState, { reader }), root && !valid ? h('div', { className: 'dsb-rp-error' }, '工作区句柄已过期。', h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: reader.reload }, '重新打开')) : null,
+    valid ? h('div', { className: 'dsb-ws-pane', hidden: tab !== 'files' || !!localFile }, h(Directory, { key: root.rootId, root, enabled: active && tab === 'files' && !localFile, selected, onOpenFile: open })) : null,
+    valid && selected && (tab === 'preview' || localFile) ? h('div', { className: 'dsb-ws-pane' },
+      localFile ? h('button', { type: 'button', className: 'bt-soft bt-soft-sm', onClick: () => setLocalFile(null) }, '返回文件树') : null,
+      h(FilePreview, { key: `${root.rootId}:${selected}`, target, root, path: selected, line, enabled: active && context.available && current })) : null)
 }
