@@ -27,9 +27,10 @@ export class RequestGate {
       throw new DeckError('bot/refused', server.mode === 'browser' ? '此配对为浏览器权限，敏感操作请用服务器生成的手机配对码重新添加客户端。' : '该操作必须在服务器本机完成；客户端没有绕过远程权限。')
     }
     const token = connection.token()
+    const learningWrite = request.endpoint === 'learning-answer'
     let sent = false
     const check = () => {
-      const unknown = sent && EXTRA_WRITES.has(request.endpoint)
+      const unknown = sent && (EXTRA_WRITES.has(request.endpoint) || learningWrite)
       if (context.signal?.aborted) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '请求已取消，服务器可能已执行，结果待确认；未自动重发。' : '请求已取消，未自动重发。')
       if (!token || !connection.valid(token, !openingRead(request.endpoint))) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/read-only', unknown ? '连接或状态已变化，操作结果待确认；未自动重发。' : '连接或状态已变化，当前为缓存，操作未发送。')
       if ((!backgroundRead(request.endpoint) || policy === 'unlock') && !context.active()) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '原服务器界面已切换或隐藏，操作结果待确认；未自动重发。' : '原服务器界面已切换或隐藏，操作未发送。')
@@ -44,8 +45,8 @@ export class RequestGate {
     if (!token) throw new DeckError('bot/read-only', '原连接已经失效。')
     sent = true
     const value = await connection.call(request.endpoint, request.payload, context.signal, token)
-    // 资源回包重新核对上下文；写入可能已经执行，不能把丢失回执说成未发送。
-    if (EXTRA_OPERATIONS.has(request.endpoint)) check()
+    // 资源与学习审批回包重新核对上下文；写入可能已执行，不能把丢失回执说成未发送。
+    if (EXTRA_OPERATIONS.has(request.endpoint) || learningWrite) check()
     return { value, token }
   }
 }

@@ -116,7 +116,7 @@ export function App() {
   }
   const visibleShown = shown && (roster.byId[shown] || roster.roomsById[shown]) ? shown : null
   if (!localeReady) return null
-  return h(ResourceContext.Provider, { value: { roster, cached, epoch: resourceEpoch, selection: shown, actions } }, h('div', { className: 'deck-remote-frame' },
+  return h(ResourceContext.Provider, { value: { roster, cached, mode: status.mode, epoch: resourceEpoch, selection: shown, actions } }, h('div', { className: 'deck-remote-frame' },
     cached ? h('div', { className: 'deck-cache-banner', role: 'status' }, `${status.alias} · 缓存 · 完成状态待确认`, status.error ? h('span', null, status.error) : null) : null,
     h('fieldset', { className: 'deck-remote-controls', disabled: cached },
       h('main', { className: 'dsb-main dsb_centerCol' },

@@ -15,6 +15,13 @@ body[data-deck-background] .dsb-head::before{background:none}
 /* 当前私聊审批固定在输入框上方，不混入历史消息；原卡片保留服务器公开请求说明与原按钮。 */
 .deck-chat-approvals{display:flex;flex-direction:column;gap:8px;flex:none;width:100%;max-width:min(992px,100%);max-height:min(280px,35dvh);overflow:auto;margin-bottom:8px}
 .deck-chat-approvals>.bt-mw-card{flex:none}
+/* 学习差异卡属于消息滚动区，展开不会挤走输入框或滚动外层窗口。 */
+.deck-learning-cards{margin:12px 0;min-width:0;overflow-anchor:none}
+.deck-learning-cards>.bt-q-inline{min-width:0}
+.deck-learning-cards .bt-q-head{flex-wrap:wrap}
+.deck-learning-cards .bt-q-text{flex:1 1 180px;min-width:0}
+.deck-learning-cards .bt-learning-status{margin-left:auto}
+.deck-learning-cards .bt-learning-text{min-width:0;overflow-wrap:anywhere}
 /* 原输入框只增补候选层；菜单不覆盖草稿，不跨出缓存权限边界。 */
 .dsb-composer-wrap{position:relative}
 .deck-composer-menu{position:absolute;z-index:30;left:0;right:0;bottom:calc(100% + 8px);max-height:min(260px,40dvh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--bt-line);border-radius:12px;padding:5px;background:var(--bt-main);box-shadow:0 10px 30px #0003}

@@ -19,6 +19,11 @@ const SCOPE_EDITS = new Map([
     ["import { t } from './i18n.js'", "import { t } from './i18n.js'\nimport { HeaderActions } from '@dsbotdeck/header-actions'"],
     ["  const pill = h('button', {", "  const pill = h(HeaderActions, {\n    botId: !away ? bot?.id : undefined, name, openSettings: actions.openSettings,"],
   ]],
+  ['ds-bot/src/client/learning-card.js', [
+    ["function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions }) {", "export function ProposalCard({ proposal, initialError = '', onFailure, onResolved, actions, disabled = false }) {"],
+    ['    if (busyRef.current) return', '    if (busyRef.current || disabled) return'],
+    ['    h(ProposalFoot, { busy, answer }))', '    h(ProposalFoot, { busy: busy || disabled, answer }))'],
+  ]],
   ['ds-bot/src/client/details-drawer.js', [
     ["    ...(bot ? ['browser'] : []),\n    ...(bot && roster.computer?.enabled === true ? ['computer'] : []),\n", ''],
   ]],
@@ -90,7 +95,8 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source,
       '    if (value.unchanged || (value.revision === current.revision && value.modelsKey === current.modelsKey)) return',
       '    if (value.unchanged || (!full && value.revision === current.revision && value.modelsKey === current.modelsKey)) return')
-    source = replaceOnce(source, '  const actions = {', '  const actions = {\n    deckRefreshGoals: async signal => { await pull(true, signal); return roster.getSnapshot() },')
+    source = replaceOnce(source, '  const actions = {', '  const actions = {\n    deckRefreshLearning: async signal => { await pull(true, signal); return roster.getSnapshot() },\n    deckRefreshGoals: async signal => { await pull(true, signal); return roster.getSnapshot() },')
+    source = replaceOnce(source, '    const changed = {}', '    const changed = learningLiveChanges(current, value)')
     source = replaceOnce(source,
       "      actions.noteLive(part, 'tool', doing?.tool ? { label: workPhrase(doing), state: toolState(doing.tool) } : null)",
       "      const tool = workToolNote(doing)\n      actions.noteLive(part, 'tool', tool ? { ...tool, state: toolState(tool.tool) } : null)")
@@ -100,7 +106,7 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source,
       '    if (value.capabilityStatuses !== undefined && JSON.stringify(value.capabilityStatuses) !== JSON.stringify(current.capabilityStatuses ?? {})) changed.capabilityStatuses = value.capabilityStatuses',
       '    if (value.capabilityStatuses !== undefined && JSON.stringify(value.capabilityStatuses) !== JSON.stringify(current.capabilityStatuses ?? {})) changed.capabilityStatuses = value.capabilityStatuses\n    // 设备授权可以先于团队 revision 变化，不能被原增量早退忽略。\n    if (value.extras !== undefined && JSON.stringify(value.extras) !== JSON.stringify(current.extras ?? null)) changed.extras = value.extras')
-    return "import { workToolNote } from '@dsbotdeck/tool-model'\nimport { DeckError } from '@dsbotdeck/validation'\n" + source
+    return "import { workToolNote } from '@dsbotdeck/tool-model'\nimport { learningLiveChanges } from '@dsbotdeck/learning-model'\nimport { DeckError } from '@dsbotdeck/validation'\n" + source
   }
   if (name === 'ds-bot/src/client/activity-row.js') {
     source = replaceOnce(source, 'inputAt > (tool?.at ?? 0)', 'preferInputStatus(inputAt, tool)')
@@ -146,7 +152,10 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source,
       '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)',
       '  const running = hooks.useSessionStatus(map => map.get(sessionId)?.running === true)\n  const approvalKey = hooks.useWork(work => JSON.stringify(room === undefined ? foregroundApprovals(work, bot?.id, sessionId) : []))\n  const approvals = JSON.parse(approvalKey)')
-    source = replaceOnce(source, '[view.items, stream, pending, running, question]', '[view.items, stream, pending, running, question, approvalKey]')
+    source = replaceOnce(source, '[view.items, stream, pending, running, question]', '[view.items, stream, pending, running, question, approvalKey, roster.learning, roster.learningSettled]')
+    source = replaceOnce(source,
+      "          question ? h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs) }) : null))),",
+      "          question ? h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs) }) : null,\n          h(LearningCards, { sessionId })))),")
     source = replaceOnce(source,
       "    h('div', { className: 'dsb-composer-root' },",
       "    h('div', { className: 'dsb-composer-root' },\n      approvals.length ? h('div', { className: 'deck-chat-approvals', role: 'group', 'aria-label': t('Approval') }, approvals.map(approval => h(ApprovalCard, { key: approval.id, approval, bot, actions, showBot: true }))) : null,")
@@ -155,7 +164,7 @@ export function paintSource(source, id, root) {
     const anchor = '  const onScroll = () => {\n'
     source = replaceOnce(source, anchor, `  // 本地远程壳只在成功布局最新一页后确认对应结果。\n  useLayoutEffect(() => {\n    if (!view.loading && !view.failed && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)\n  }, [view.items, view.loading, view.failed, view.sessionId])\n\n${anchor}`)
     source = replaceOnce(source, '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n', '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n    if (follow.current && !view.loading && !view.failed) team.deckPaint?.(bot?.id, room?.id, node)\n')
-    return "import { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
+    return "import { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { LearningCards } from '@dsbotdeck/learning-cards'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")

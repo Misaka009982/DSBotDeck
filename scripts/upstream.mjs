@@ -41,6 +41,8 @@ export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   if (specifier === '@dsbot/characters') return path.join(sourceRoot, 'ds-bot/src/client/characters.js')
   if (specifier === '@dsbot/themes') return path.join(sourceRoot, 'ds-bot/src/client/themes.js')
   if (specifier === '@dsbot/bootstrap') return BOOTSTRAP_ID
+  if (specifier === '@dsbotdeck/learning-cards') return path.join(clientRoot, 'src/remote/learning-cards.js')
+  if (specifier === '@dsbotdeck/learning-model') return path.join(clientRoot, 'src/shared/learning-model.ts')
   if (specifier === '@dsbotdeck/header-actions') return path.join(clientRoot, 'src/remote/header-actions.js')
   if (specifier === '@dsbotdeck/private-goal') return path.join(clientRoot, 'src/remote/private-goal.js')
   if (specifier === '@dsbotdeck/composer-menu') return path.join(clientRoot, 'src/remote/composer-menu.js')

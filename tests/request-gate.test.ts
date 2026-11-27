@@ -72,6 +72,37 @@ test('增补正文已发出后切服再切回或取消，迟到正文也不能�
   connection.call = async () => { controller.abort(); return 'fictional-body' }
   await assert.rejects(new RequestGate().execute(connection, 'extra-messages', { botId: 'bot-a' }, { active: () => true, signal: controller.signal }), /取消/)
 })
+test('学习批准沿用手机配对权限，浏览器、隐藏和取消不能发送', async () => {
+  const connection = new BoundFixture(); const gate = new RequestGate()
+  assert.equal(endpointPolicy('learning-answer', 'phone'), 'unlock')
+  assert.equal(endpointPolicy('learning-answer', 'browser'), 'denied')
+  for (const approve of [true, false]) await gate.execute(connection, 'learning-answer', { id: 'proposal-a', approve }, { active: () => true })
+  assert.deepEqual(connection.sent, [
+    { endpoint: 'learning-answer', payload: { id: 'proposal-a', approve: true } },
+    { endpoint: 'learning-answer', payload: { id: 'proposal-a', approve: false } },
+  ])
+  connection.mode = 'browser'
+  await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => true }), /浏览器权限/)
+  connection.mode = 'phone'
+  await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => false }), /切换或隐藏/)
+  const controller = new AbortController(); controller.abort()
+  await assert.rejects(gate.execute(connection, 'learning-answer', {}, { active: () => true, signal: controller.signal }), /取消/)
+  assert.equal(connection.sent.length, 2)
+})
+test('学习审批已发送后切服、断线或取消，回执标记未知且不自动重发', async () => {
+  for (const boundary of ['navigation', 'connection', 'abort']) {
+    const connection = new BoundFixture(); const controller = new AbortController(); let active = true
+    connection.call = async (endpoint, payload) => {
+      connection.sent.push({ endpoint, payload })
+      if (boundary === 'navigation') active = false
+      if (boundary === 'connection') connection.epoch++
+      if (boundary === 'abort') controller.abort()
+      return 'accepted'
+    }
+    await assert.rejects(new RequestGate().execute(connection, 'learning-answer', { id: 'proposal-a', approve: true }, { active: () => active, signal: controller.signal }), { code: 'bot/outcome-unknown' })
+    assert.equal(connection.sent.length, 1)
+  }
+})
 test('默认门禁只按原配对权限发送，不依赖本机 Windows Hello', async () => {
   const connection = new BoundFixture(); const gate = new RequestGate()
   const payload = { provider: 'fixture-provider', value: 'fictional-key' }

@@ -249,6 +249,31 @@ test('普通私聊审批通过真实门禁回传原编号与选择，只发送�
     assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'approval-answer'), false)
   })
 })
+test('学习审批通过真实scheme和原配对链路回传选择，切服及旧界面不投递', async () => {
+  await withClient(async (manager, peers) => {
+    const peer = peers.get('server-a'); assert.ok(peer)
+    let epoch = 1
+    manager.navigate('server-a', { action: 'chat', kind: 'bot', id: 'server-a-bot' })
+    const handler = clientHandler({ host: 'server-a', root: path.resolve('fixture'), gate: new RequestGate(), connection: () => manager.connection('server-a'),
+      active: () => manager.activeServer() === 'server-a', instance: () => 'view-a',
+      context: () => { const opening = epoch; return () => epoch === opening && manager.activeServer() === 'server-a' }, renderedTarget: () => ({ kind: 'bot', id: 'server-a-bot' }), read: () => {} })
+    const request = (approve: boolean) => new Request('dsbotdeck://server-a/view-a/api/bot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: 'learning-answer', payload: { id: 'proposal-a', approve } }) })
+    for (const approve of [true, false]) {
+      peer.resourceReplies.set('learning-answer', { applied: approve })
+      const result = await (await handler(request(approve))).json() as { ok: boolean; value: unknown }
+      assert.equal(result.ok, true); assert.deepEqual(result.value, { applied: approve })
+    }
+    const rpc = peer.rpc.bind(peer)
+    peer.rpc = async <T>(method: string, payload: unknown) => { const value = await rpc<T>(method, payload); epoch++; return value }
+    const stale = await (await handler(request(true))).json() as { ok: boolean; error: { code: string } }
+    assert.equal(stale.ok, false); assert.equal(stale.error.code, 'bot/outcome-unknown')
+    manager.navigate('server-b', { action: 'chat', kind: 'bot', id: 'server-b-bot' })
+    const switched = await (await handler(request(true))).json() as { ok: boolean }
+    assert.equal(switched.ok, false)
+    assert.equal(peer.sent.filter(entry => entry.endpoint === 'learning-answer').length, 3)
+    assert.equal(peers.get('server-b')?.sent.some(entry => entry.endpoint === 'learning-answer'), false)
+  })
+})
 test('过期审批不自动重发，切服或断线时不会发送旧授权', async () => {
   await withClient(async (manager, peers) => {
     const peer = peers.get('server-a'); assert.ok(peer)

@@ -60,6 +60,34 @@ test('私聊目标只适配固定Bot设置卡片和全量状态刷新，不改�
     assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
   }
 })
+test('学习卡复用原差异与批准按钮，接入消息区并更新无revision变化的提案', async () => {
+  const names = ['ds-bot/src/client/learning-card.js', 'app/ui/src/chat.js', 'app/ui/src/team.js']
+  const adapted = new Map<string, string>()
+  for (const name of names) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const next = paintSource(raw, path.join(source, name), source) ?? ''
+    const parsed = ts.transpileModule(next, { fileName: name, reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, allowJs: true } })
+    assert.deepEqual(parsed.diagnostics ?? [], [], `${name} 适配后的语法必须有效`)
+    adapted.set(name, next)
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+    assert.throws(() => paintSource(`${raw}\n${raw}`, path.join(source, name), source), /结构已变化/)
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+  }
+  const card = adapted.get(names[0]) ?? ''
+  assert.ok(card.includes('export function ProposalCard(')); assert.ok(card.includes('if (busyRef.current || disabled) return'))
+  assert.ok(card.includes('busy: busy || disabled, answer')); assert.ok(card.includes('blocks: [rows]')); assert.ok(card.includes('proposal.edits.map(agentEditRows)'))
+  assert.ok(card.includes('actions.learningAnswer(proposal.id, approve)')); assert.ok(card.includes("t('Approve')")); assert.ok(card.includes("t('Decline')"))
+  const chat = adapted.get(names[1]) ?? ''
+  assert.ok(chat.includes("import { LearningCards } from '@dsbotdeck/learning-cards'"))
+  assert.ok(chat.indexOf('h(LearningCards, { sessionId })') < chat.indexOf("h('div', { className: 'dsb-composer-root' }"))
+  assert.ok(chat.includes('approvalKey, roster.learning, roster.learningSettled]'))
+  const team = adapted.get(names[2]) ?? ''
+  assert.ok(team.includes('const changed = learningLiveChanges(current, value)'))
+  assert.ok(team.indexOf('const changed = learningLiveChanges') < team.indexOf('if (value.unchanged ||'))
+  assert.ok(team.includes('deckRefreshLearning: async signal => { await pull(true, signal); return roster.getSnapshot() }'))
+  assert.equal(adaptUiSource('@dsbotdeck/learning-cards', undefined, client, source), path.join(client, 'src/remote/learning-cards.js'))
+  assert.equal(adaptUiSource('@dsbotdeck/learning-model', undefined, client, source), path.join(client, 'src/shared/learning-model.ts'))
+})
 test('顶部Bot名称接设置按钮，原头像详情和群目标仍保留上游动作', async () => {
   const name = 'ds-bot/src/client/header.js'
   const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
@@ -142,7 +170,7 @@ test('普通私聊审批只读接入输入区，允许一次和拒绝仍使用�
   assert.ok(chat.includes('foregroundApprovals(work, bot?.id, sessionId)'))
   assert.ok(chat.includes('room === undefined'))
   assert.ok(chat.includes('h(ApprovalCard, { key: approval.id, approval, bot, actions, showBot: true })'))
-  assert.ok(chat.includes('deck-chat-approvals')); assert.ok(chat.includes('[view.items, stream, pending, running, question, approvalKey]'))
+  assert.ok(chat.includes('deck-chat-approvals')); assert.ok(chat.includes('[view.items, stream, pending, running, question, approvalKey, roster.learning, roster.learningSettled]'))
   const cards = adapted.get(names[1]) ?? ''
   assert.ok(cards.includes('approval.answerable === true'))
   assert.equal(cards.includes('approval.answerable && (approval.roomId !== undefined || approval.taskId !== undefined)'), false)
