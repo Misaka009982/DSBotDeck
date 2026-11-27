@@ -16,13 +16,16 @@ src/remote/app.js 是对上游独立 UI 入口的客户端适配，增加服务�
 缓存提示和远程连接绑定；详情、设置、主题与素材仍来自上游。
 src/remote/chat.js 和 chat-read.js 是远程会话容器，延续 DS-Bot 原分页、
 消息行、卡片及输入控件接入，不调用新版桌面仅供本机使用的会话日志。
-入口适配与 scripts/paint-source.mjs 仅在构建内存中接入呈现与权限边界，
-不保存上游补丁或复制整页 UI。
-src/remote/composer-menu.js 只增补独立输入框的候选层，复用上游
-mentionRows、menuIcons 和 commandEntries 的目录、原角色标记与动作；
+入口适配与 scripts/paint-source.mjs、paint-components.mjs 仅在构建内存中
+接入呈现与权限边界，不保存上游补丁或复制整页 UI。
+src/remote/composer-menu.js 复用原 ComposerMenu、mentionRows 和
+commandEntries 的目录、原角色标记与动作；附件直接使用原
+ComposerAttachments 和 Attachments。
 不启动本机 DSH，不复制技能/文件目录或开放未知远程端点。
 src/remote/tool-steps.js、tool-detail.js 与纯呈现模型独立实现气泡间分组、
-真实说明、脱敏参数/输出的有界读取；复用原任务样式、主题和代码复制，
+真实说明、脱敏参数/输出的有界读取；单项和代码块复用原
+ToolCardShell/CodeSection，历史与保存差异复用 computeLineDiff/DiffFileView，
+委派导航复用 SubagentLineageBar/SubagentReadOnlyBar。
 不复制增补工作树或不可用的 Agents 组件，不执行记录里的命令。
 src/remote/private-goal.js 独立适配已核对的私聊目标协议，在原 Bot 设置
 Card 中显示目标和控制，由当前私聊的 /goal 按需打开；目标仍由服务器执行。

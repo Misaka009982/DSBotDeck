@@ -6,6 +6,7 @@ import { changePage, changeReference } from '../shared/change-model.ts'
 import { currentResourceSession, sessionResourceTarget } from '../shared/resource-model.ts'
 import { workspacePath } from '../shared/workspace-model.ts'
 import { WorkspacePane } from './workspace-pane.js'
+import { RecordedChange } from './change-view.js'
 import { ReadState, useResourceContext, useResourceRead } from './resource-read.js'
 export function ChangeDetail({ reference }) {
   const context = useResourceContext('toolChanges'); const workspace = useResourceContext('workspace'); const node = useRef(null)
@@ -32,9 +33,7 @@ export function ChangeDetail({ reference }) {
         page.stopped ? h('p', { className: 'deck-resource-note', role: 'status' }, '此次补丁中途停止；这里只显示已记录的部分修改。') : null,
         !page.oldAvailable ? h('p', { className: 'deck-resource-note' }, '没有记录旧文本，不能据此判断为新建文件或完整差异。') : null,
         page.redacted ? h('p', { className: 'deck-resource-note' }, '记录中的敏感内容已遮盖。') : null,
-        h('div', { className: 'deck-change-columns' },
-          h('section', null, h('strong', null, '修改前的记录片段'), h('pre', null, page.oldText ?? '（旧文本不可用）')),
-          h('section', null, h('strong', null, '修改后的记录片段'), h('pre', null, page.newText === '' ? '（空文本）' : page.newText))),
+        h(RecordedChange, { path: page.path, before: page.oldText, after: page.newText, fragment: true, disabled: reader.busy, canCopy: () => reader.canCopy(page) }),
         h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: () => { void copy() } }, '复制本段记录'),
         canOpen ? h('button', { type: 'button', className: 'bt-soft', onClick: () => setCurrentFile(value => !value) }, currentFile ? '收起当前文件' : '读取当前工作区中的文件')
           : h('p', { className: 'deck-resource-note' }, '历史路径仅作记录；当前文件请从获授权的工作区目录选择。'),

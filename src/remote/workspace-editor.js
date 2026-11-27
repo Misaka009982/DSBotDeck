@@ -8,6 +8,7 @@ import { errorCode } from '../shared/validation.ts'
 import { currentResourceSession, resourceAccessFailure, resourceFailure } from '../shared/resource-model.ts'
 import { onResourceDenied, rejectResourceReads, ReadState, useResourceContext, useResourceRead } from './resource-read.js'
 import { draftPresence } from './draft-presence.js'
+import { RecordedChange } from './change-view.js'
 export const workspaceDrafts = new WorkspaceDraftStore()
 workspaceDrafts.subscribe(() => draftPresence('workspace', workspaceDrafts.list().length > 0))
 const useDrafts = () => useSyncExternalStore(workspaceDrafts.subscribe, () => workspaceDrafts.revision)
@@ -87,8 +88,8 @@ export function WorkspaceEditor({ target, root, path, onClose }) {
       change ? h('div', null, h('strong', null, '来源：本次服务器保存结果'),
         !change.complete ? h('p', { className: 'deck-resource-note' }, '服务器未保留完整前后文本。') : null,
         change.redacted ? h('p', { className: 'deck-resource-note' }, '修改记录包含已遮盖内容。') : null,
-        h('div', { className: 'deck-change-columns' }, h('section', null, h('strong', null, '保存前'), h('pre', null, change.before ?? '旧文本不可用')),
-          h('section', null, h('strong', null, '保存后'), h('pre', null, change.after ?? '新文本不可用')))) : null) : null)
+        h(RecordedChange, { path, before: change.before, after: change.after, disabled: busy,
+          canCopy: () => usable() && workspaceDrafts.get(target, path) === draft })) : null) : null)
 }
 export function WorkspaceDraftShelf() {
   const context = useResourceContext('workspace'); const node = useRef(null)

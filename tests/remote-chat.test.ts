@@ -11,7 +11,7 @@ import { DeckError, errorCode } from '../src/shared/validation.ts'
 const hookText = await readFile(new URL('../src/remote/chat-read.js', import.meta.url), 'utf8')
 const upstream = await readFile(new URL('../../DS-Bot/app/ui/src/chat.js', import.meta.url), 'utf8')
 const helpersText = paintSource(upstream, path.resolve('source/app/ui/src/chat.js'), path.resolve('source')) ?? ''
-const helpers = runInNewContext(`${helpersText.replace(/^export /gm, '')}\n({ adaptRoomItems, mergeLatestPage, sameItem })`)
+const helpers = runInNewContext(`${helpersText.replace(/^import .*\r?\n/gm, '').replace(/^export /gm, '')}\n({ adaptRoomItems, mergeLatestPage, sameItem })`)
 interface Slot { value?: any; deps?: unknown[]; cleanup?: (() => void) | void }
 interface Request { endpoint: string; payload: Record<string, unknown>; signal?: AbortSignal; resolve(value: unknown): void; reject(error: Error): void }
 const settle = async () => { for (let index = 0; index < 12; index++) await Promise.resolve() }

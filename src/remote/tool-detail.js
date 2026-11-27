@@ -3,6 +3,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { call } from '@dsbot/client/api.js'
 import { writeClipboard } from '@dsbot/ui/primitives.js'
+import { CodeSection } from '@dsbot/ui/tool-card.js'
 import { DetailReadQueue } from '../shared/extra-read-model.ts'
 import { errorCode } from '../shared/validation.ts'
 import { argumentPresentation } from '../shared/tool-display.ts'
@@ -68,32 +69,36 @@ export function useToolDetail({ tool, scope, field, fullMessages, enabled, node,
     next: () => { if (value?.available && !value.previewLimited && value.nextOffset !== null) void load(value.nextOffset, value.digest) } }
 }
 export function ToolDetailField({ reader, field, name = null }) {
-  const [copied, setCopied] = useState(false); const [copyError, setCopyError] = useState(null)
+  const [copyError, setCopyError] = useState(null)
   const copyRevision = useRef(0)
   const page = reader.value
   const more = page?.available && !page.previewLimited && page.nextOffset !== null
   const presentation = page?.available && field === 'arguments' ? argumentPresentation(name, page.text, !page.previewLimited && page.nextOffset === null) : null
   const shown = presentation?.text ?? (page?.available ? page.text : '')
-  useEffect(() => { setCopied(false); setCopyError(null); copyRevision.current += 1 }, [page])
+  useEffect(() => { setCopyError(null); copyRevision.current += 1 }, [page])
   useEffect(() => () => { copyRevision.current += 1 }, [])
   const copy = async (full = false) => {
-    if (!reader.canCopy(page)) return
+    if (!reader.canCopy(page)) return false
     const revision = ++copyRevision.current
     const ok = await writeClipboard(full || presentation?.compact ? page.text : shown)
-    if (revision !== copyRevision.current || !reader.canCopy(page)) return
-    setCopied(ok); setCopyError(ok ? null : '复制未成功，请手动选择正文复制。')
+    if (revision !== copyRevision.current || !reader.canCopy(page)) return false
+    setCopyError(ok ? null : '复制未成功，请手动选择正文复制。')
+    return ok
   }
   return h('section', { className: 'deck-tool-field', 'aria-label': presentation?.title ?? (field === 'arguments' ? '参数' : '输出') },
-    h('div', { className: 'deck-tool-section' }, presentation?.title ?? (field === 'arguments' ? '参数' : '输出')),
     reader.busy ? h('span', { role: 'status', className: 'deck-tool-limit' }, '正在读取…') : null,
     reader.error ? h('p', { role: 'alert', className: 'deck-tool-error' }, reader.error, page?.available ? ' 已读内容仍保留。' : '',
       h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: more ? reader.next : reader.reload }, more ? '重试下一段' : '重新读取首段')) : null,
     page && !page.available ? h('p', { className: 'deck-tool-limit' }, page.reason) : null,
     page?.available ? h('div', null,
-      h('div', { className: 'md-code deck-tool-code' },
-        h('button', { type: 'button', className: 'md-copy', disabled: reader.busy, onClick: () => { void copy() } }, copied ? '已复制' : presentation?.title === '命令' ? '复制命令' : '复制已读内容'),
-        h('pre', { className: presentation?.compact ? 'deck-tool-params' : undefined }, shown === '' ? '（服务器返回空文本）' : shown)),
-      presentation?.extra ? h('div', { className: 'deck-tool-extra' }, h('span', { className: 'deck-tool-section' }, '其他参数'), h('pre', null, presentation.extra)) : null,
+      h(CodeSection, { key: JSON.stringify([page.digest, page.text.length]), label: presentation?.title ?? (field === 'arguments' ? '参数' : '输出'),
+        text: shown, unfolded: true, disabled: reader.busy, onCopy: () => copy() }),
+      shown === '' ? h('p', { className: 'deck-tool-limit' }, '（服务器返回空文本）') : null,
+      presentation?.extra ? h(CodeSection, { label: '其他参数', text: presentation.extra, unfolded: true, disabled: reader.busy, onCopy: async text => {
+        if (!reader.canCopy(page)) return false
+        const ok = await writeClipboard(text)
+        return reader.canCopy(page) && ok
+      } }) : null,
       presentation?.title === '命令' ? h('button', { type: 'button', className: 'bt-soft', disabled: reader.busy, onClick: () => { void copy(true) } }, '复制完整参数') : null,
       page.previewLimited ? h('p', { role: 'status', className: 'deck-tool-limit' }, '已达到 128 Ki 字符显示上限，仅保留已读开头，内容不完整；更多内容请在服务器原会话查看。') : null,
       h('div', { className: 'deck-tool-pages' },

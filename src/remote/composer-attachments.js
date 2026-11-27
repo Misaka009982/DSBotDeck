@@ -2,7 +2,9 @@
 // 附件只来自用户的选择、拖入或粘贴；跨聊天保留在本服务器视图内存中。
 import { createElement as h, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { call } from '@dsbot/client/api.js'
-import { CloseIcon, PaperclipIcon } from '@dsbot/client/icons.js'
+import { ComposerAttachments } from '@dsbot/ui/chat.js'
+import { fileSizeText } from '@dsbot/ui/primitives.js'
+import { Attachments as MessageAttachments } from '@dsbot/client/user-message.js'
 import { AttachmentBatch, attachmentCapability, attachmentKey, attachmentMetadata, attachmentTarget } from '../shared/attachment-model.ts'
 import { ResourceContext } from './resource-read.js'
 import { draftPresence } from './draft-presence.js'
@@ -11,7 +13,19 @@ const listeners = new Set()
 let revision = 0
 const changed = () => { revision += 1; draftPresence('attachments', drafts.size > 0); for (const listener of listeners) listener() }
 const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener) }
-const bytesLabel = size => size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KiB` : `${(size / 1024 / 1024).toFixed(1)} MiB`
+const bytesLabel = fileSizeText
+function PendingAttachments({ files, disabled, onRemove }) {
+  const [previews, setPreviews] = useState(() => new Map())
+  useLayoutEffect(() => {
+    const next = new Map()
+    for (const file of files) if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) && file instanceof Blob) next.set(file, URL.createObjectURL(file))
+    setPreviews(next)
+    return () => { for (const url of next.values()) URL.revokeObjectURL(url) }
+  }, [files])
+  return h('fieldset', { className: 'deck-attachment-items', disabled }, h(ComposerAttachments, {
+    items: files.map((file, index) => ({ id: index, name: file.name, size: file.size, isImage: previews.has(file), previewUrl: previews.get(file) })), onRemove,
+  }))
+}
 export function useComposerAttachments({ sessionId, field, disabled, onSend, onError, setText }) {
   useSyncExternalStore(subscribe, () => revision)
   const context = useContext(ResourceContext)
@@ -91,9 +105,10 @@ export function useComposerAttachments({ sessionId, field, disabled, onSend, onE
   const onDrop = event => { if (Array.from(event.dataTransfer?.types ?? []).includes('Files')) { event.preventDefault(); event.stopPropagation(); add([...(event.dataTransfer.files ?? [])]) } }
   const differentPart = batch && batch.target.sessionId !== sessionId
   const content = batch ? h('div', { className: 'deck-attachment-rail', role: 'group', 'aria-label': '待发送附件' },
-    batch.files.map((file, index) => h('div', { className: 'deck-attachment-file', key: index }, h(PaperclipIcon, { size: 14 }),
-      h('span', { title: file.name }, file.name), h('small', null, bytesLabel(file.size)),
-      h('button', { type: 'button', className: 'bt-soft', disabled: batch.locked, 'aria-label': `移除 ${file.name}`, onClick: () => { batch.remove(index); if (!batch.files.length) drafts.delete(key); changed() } }, h(CloseIcon, { size: 12 })))),
+    h(PendingAttachments, { files: batch.files, disabled: batch.locked || disabled, onRemove: index => {
+      if (!available() || batch.locked || drafts.get(key) !== batch) return
+      batch.remove(index); if (!batch.files.length) drafts.delete(key); changed()
+    } }),
     h('p', { className: 'deck-attachment-note', role: 'status' }, batch.phase === 'uploading' ? `上传附件 ${bytesLabel(batch.sentBytes)} / ${bytesLabel(batch.size)}` : batch.phase === 'sending' ? '正在提交消息…' : batch.message ?? '最多 8 个文件，单文件 16 MiB，合计 32 MiB。点击发送后上传。'),
     differentPart ? h('p', { className: 'deck-attachment-note' }, '会话已换段，附件仍绑定原会话。', !batch.locked ? h('button', { type: 'button', className: 'bt-soft', onClick: () => {
       if (!available()) return
@@ -122,7 +137,10 @@ export function AttachmentDraftShelf() {
 }
 export function UserAttachments({ files }) {
   if (!Array.isArray(files)) return null
-  return h('span', { className: 'deck-user-files', 'data-text-interaction-exclude': '' }, files.slice(0, 32).map((file, index) =>
-    h('span', { key: index, className: 'deck-user-file' }, h(PaperclipIcon, { size: 14 }), typeof file?.name === 'string' ? file.name.slice(0, 200) : '文件',
-      Number.isSafeInteger(file?.bytes) && file.bytes >= 0 ? h('small', null, bytesLabel(file.bytes)) : null)))
+  return h('span', { className: 'deck-user-files', 'data-text-interaction-exclude': '' }, h(MessageAttachments, {
+    attachments: files.slice(0, 32).map(file => ({ type: 'file', attachment: {
+      name: typeof file?.name === 'string' ? file.name.slice(0, 200) : '文件',
+      bytes: Number.isSafeInteger(file?.bytes) && file.bytes >= 0 ? file.bytes : undefined,
+    } })),
+  }))
 }

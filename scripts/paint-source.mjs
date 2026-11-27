@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // 不修改上游文件；构建内存中增加结果呈现回调、只读工具摘要，并隐藏不需要的控制入口。
 import path from 'node:path'
+import { COMPONENT_UI_FILES, composerAttachmentsSource, paintComponents } from './paint-components.mjs'
 const slash = value => value.replaceAll('\\', '/')
 const TOOL_STEPS_IMPORT = "import { ToolSteps } from '@dsbotdeck/tool-steps'\nimport { ToolHistoryModel, toolGroupKey } from '@dsbotdeck/tool-history'\nimport { DiagnosticHistoryModel, MessageNote } from '@dsbotdeck/message-note'\nimport { groupInternalMessages } from '@dsbotdeck/chat-model'\n"
 /** @type {Map<string, [string, string][]>} */
 const SCOPE_EDITS = new Map([
+  ['ds-bot/src/client/user-message.js', [
+    ['function Attachments({ attachments, renderMessageImages }) {', 'export function Attachments({ attachments, renderMessageImages }) {'],
+  ]],
+  ['app/ui/src/tool-view-shared.js', [
+    ['export function MiniCopy({ text }) {', 'export function MiniCopy({ text, onCopy, disabled = false }) {'],
+    ['    void writeClipboard(text).then((ok) => {', '    if (disabled) return\n    void Promise.resolve(onCopy ? onCopy(text) : writeClipboard(text)).then((ok) => {'],
+    ["    className: 'bt-mini dsb-tool-copy',", "    className: 'bt-mini dsb-tool-copy', disabled,"],
+  ]],
   ['ds-bot/src/client/settings.js', [
     ["pages: [['computer', 'Computer use'], ['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]", "pages: [['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]"],
     ["tools: 'computer', guide: 'overview'", "tools: 'capabilities', guide: 'overview'"],
@@ -76,13 +85,15 @@ const SCOPE_EDITS = new Map([
     ['  const canAlways = Boolean(approval.alwaysAllow) && !readOnly', '  const canAlways = false'],
   ]],
 ])
-export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys(), 'app/ui/src/right-panel.js', 'app/ui/src/workspace-terminal.js']
+export const SCOPED_UI_FILES = [...SCOPE_EDITS.keys(), ...COMPONENT_UI_FILES, 'app/ui/src/right-panel.js', 'app/ui/src/workspace-terminal.js']
 function replaceOnce(source, before, after) {
   if (source.split(before).length !== 2) throw new Error(`上游 UI 接入结构已变化，请更新只读构建适配；锚点：${before.slice(0, 120)}`)
   return source.replace(before, after)
 }
 export function paintSource(source, id, root) {
   const name = slash(path.relative(root, id))
+  const component = paintComponents(source, name)
+  if (component !== null) return component
   // 只读提取原桌面的无传输呈现；本机 watch、文件打开及 PTY 接口不进入远程依赖图。
   if (name === 'app/ui/src/right-panel.js') {
     source = source.replaceAll('\r\n', '\n')
@@ -151,7 +162,7 @@ export function paintSource(source, id, root) {
     if (source.split(first).length !== 2 || source.split(last).length !== 2) throw new Error('上游聊天分页结构已变化，请更新远程适配。')
     const start = source.indexOf(first); const end = source.indexOf(last)
     if (end <= start) throw new Error('上游聊天分页结构已变化，请更新远程适配。')
-    return source.slice(start, end).replace('const sameItem =', 'export const sameItem =')
+    return composerAttachmentsSource(source) + source.slice(start, end).replace('const sameItem =', 'export const sameItem =')
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")

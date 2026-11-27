@@ -1,4 +1,4 @@
-/* 复用原任务步骤的样式与主题变量；未知结果使用中性色，不冒充成功。 */
+/* 单项卡片和代码块来自上游；只保留工具总数、远程分页和用户要求的单行标题。 */
 .bt-tread-steps.deck-tool-steps{display:block;margin:7px 0}
 .deck-tool-heading{display:flex;align-items:center;gap:8px;padding:3px 9px;color:var(--bt-ink-2);font-size:11px;line-height:17px;cursor:pointer;list-style:none;border-radius:5px}
 .deck-tool-heading::-webkit-details-marker{display:none}
@@ -8,39 +8,20 @@
 .deck-tool-steps[open]>.deck-tool-heading .deck-tool-chevron{transform:rotate(90deg)}
 .deck-tool-list{display:flex;flex-direction:column;gap:5px;margin-top:5px}
 .deck-tool-limit{margin:5px 9px;color:var(--bt-ink-2);font-size:11px;line-height:1.6}
-.deck-tool-count{margin-left:auto;color:var(--bt-ink-3);white-space:nowrap;font-weight:400}
-.deck-tool-steps .bt-tread-step{align-items:flex-start;gap:8px;padding:6px 9px}
-.deck-tool-steps .bt-tread-step-name{flex:1;display:flex;flex-direction:column;gap:2px;overflow:visible;white-space:normal;text-overflow:clip;overflow-wrap:anywhere}
 .deck-tool-name{font-family:var(--bt-mono,ui-monospace,Consolas,monospace);font-size:11.5px;line-height:17px;color:var(--bt-ink-2)}
-.deck-tool-label{color:var(--bt-ink-3);font-size:11px;line-height:16px;font-weight:400}
-.deck-tool-outcome{flex:none;white-space:nowrap;font-size:10.5px;line-height:17px;color:var(--bt-ink-3);font-weight:400}
-.deck-tool-steps .bt-tread-step .bt-tread-step-dot{margin-top:6px;background:var(--bt-ink-3)}
-.deck-tool-steps .bt-tread-step[data-outcome=success] .bt-tread-step-dot{background:var(--bt-green)}
-.deck-tool-steps .bt-tread-step[data-outcome=failure] .bt-tread-step-dot{background:var(--bt-danger)}
-.deck-tool-steps .bt-tread-step[data-outcome=failure] .deck-tool-outcome{color:var(--bt-danger)}
 .deck-tool-call{margin:2px 0;min-width:0}
-.deck-tool-call[open]>.deck-tool-call-heading .deck-tool-chevron{transform:rotate(90deg)}
-.deck-tool-steps .deck-tool-call-heading{display:flex;flex-flow:row nowrap;align-items:center;cursor:pointer;list-style:none;min-width:0}
-.deck-tool-steps .deck-tool-call-heading>.bt-tread-step-name{display:block;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.deck-tool-call-heading::-webkit-details-marker{display:none}
-.deck-tool-call-heading:hover{background:var(--bt-hover)}
-.deck-tool-call-heading:focus-visible,.deck-tool-output>summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
-.deck-tool-description{font-size:12px;line-height:18px;font-weight:500;color:var(--bt-ink)}
+.deck-tool-call .dsb-tool-head{flex-flow:row nowrap;min-width:0}
+.deck-tool-call .dsb-tool-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.deck-tool-call .dsb-tool-meta{flex:none}
+.deck-tool-call[data-outcome=unknown] .dsb-tool-dot{background:var(--bt-ink-3);animation:none}
+.deck-tool-call[data-outcome=success] .dsb-tool-dot{background:var(--bt-green)}
+.deck-tool-call[data-outcome=failure] .dsb-tool-dot{background:var(--bt-danger)}
 .deck-tool-meta{display:flex;flex-wrap:wrap;gap:4px 10px;color:var(--bt-ink-3);font-size:10.5px}
-.deck-tool-call-body{padding:10px 12px;margin:4px 9px 12px;border:1px solid var(--bt-line);border-radius:10px;min-width:0}
 .deck-tool-field+.deck-tool-field{border-top:1px solid var(--bt-line);margin-top:10px;padding-top:6px}
-.deck-tool-extra pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto;font-size:11px;color:var(--bt-ink-2)}
-.deck-tool-code .deck-tool-params{font-size:11px;line-height:1.6;padding-bottom:8px}
-.deck-tool-section,.deck-tool-output>summary{display:block;font-size:11px;color:var(--bt-ink-2);line-height:1.8;margin:6px 0}
-.deck-tool-output>summary{cursor:pointer}
-.deck-tool-code,.deck-tool-command{min-width:0;margin:6px 0}
-.deck-tool-code pre,.deck-tool-command pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;margin:0;padding:12px;font-family:var(--bt-mono,ui-monospace,Consolas,monospace);font-size:11.5px;line-height:1.7;background:var(--bt-hover);border-radius:8px}
-.deck-tool-code pre{padding-top:38px}
+.deck-tool-output>summary{display:block;cursor:pointer;font-size:11px;color:var(--bt-ink-2);line-height:1.8;margin:6px 0}
+.deck-tool-output>summary:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 .deck-tool-pages{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:10.5px;color:var(--bt-ink-3)}
 .deck-tool-pages>span{margin-right:auto}
 .deck-tool-error{font-size:11px;line-height:1.7;color:var(--bt-danger);overflow-wrap:anywhere}
 .deck-tool-error button{margin:4px 8px}
-.deck-tool-call[data-outcome=success] .bt-tread-step-dot{background:var(--bt-green)}
-.deck-tool-call[data-outcome=failure] .bt-tread-step-dot{background:var(--bt-danger)}
-.deck-tool-call[data-outcome=failure] .deck-tool-outcome{color:var(--bt-danger)}
 @media(max-width:480px){.deck-tool-heading{flex-wrap:wrap;gap:2px 10px}}

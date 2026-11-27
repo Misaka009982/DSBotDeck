@@ -3,8 +3,8 @@
 import { createElement as h, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { mentionRows } from '@dsbot/client/at-menu.js'
 import { commandEntries } from '@dsbot/client/command-actions.js'
-import { menuIcons } from '@dsbot/client/composer.js'
-import { GoalIcon } from '@dsbot/client/icons.js'
+import { ComposerMenu } from '@dsbot/ui/composer-menus.js'
+import { GoalIcon, PeopleIcon } from '@dsbot/client/icons.js'
 import { t } from '@dsbot/client/i18n.js'
 import { privateGoalChatTarget } from '../shared/private-goal.ts'
 import { commandName, composerTrigger, menuKeyAction, replaceComposerTrigger } from '../shared/composer-model.ts'
@@ -14,7 +14,6 @@ export function useComposerMenu({ sessionId, text, setText, field, disabled, act
   const latest = useRef(roster); latest.current = roster
   const store = useMemo(() => ({ getSnapshot: () => latest.current }), [])
   const entries = useMemo(() => commandEntries({ roster: store, actions }), [store, actions])
-  const icons = useMemo(() => menuIcons(store), [store])
   const listId = `deck-composer-${useId()}`
   const panel = useRef(null); const pending = useRef(null); const composing = useRef(false)
   const [span, setSpan] = useState({ start: 0, end: 0 })
@@ -61,18 +60,12 @@ export function useComposerMenu({ sessionId, text, setText, field, disabled, act
   }
   const readRows = token => {
     if (token.kind === 'command') return commandRows().filter(row => row.key.toLowerCase().includes(token.query.toLowerCase())).slice(0, 12)
-    return (mentionRows(latest.current, sessionId, token.query) ?? []).filter(row => !/\s$/.test(token.query) || (row.bot?.name ?? t('Everyone')).length > token.query.trimEnd().length).slice(0, 12).map(row => ({ kind: 'mention', key: row.bot?.id ?? `everyone:${row.room.id}`, label: row.bot?.name ?? t('Everyone'), description: row.bot?.role ?? (row.room ? t('{count} members', { count: row.room.members.length }) : ''), icon: icons(row), text: row.text }))
+    return (mentionRows(latest.current, sessionId, token.query) ?? []).filter(row => !/\s$/.test(token.query) || (row.bot?.name ?? t('Everyone')).length > token.query.trimEnd().length).slice(0, 12).map(row => ({ kind: 'mention', key: row.bot?.id ?? `everyone:${row.room.id}`, label: row.bot?.name ?? t('Everyone'), description: row.bot?.role ?? (row.room ? t('{count} members', { count: row.room.members.length }) : ''), bot: row.bot, icon: row.bot ? null : PeopleIcon, text: row.text }))
   }
   const eligible = focused && !disabled && !blocked && !inComposition && trigger && closed !== key
   const items = eligible ? readRows(trigger) : []
   const index = selected.key === key ? Math.min(selected.index, Math.max(0, items.length - 1)) : 0
   const shown = eligible && (items.length > 0 || trigger.kind === 'command')
-  useLayoutEffect(() => {
-    const list = panel.current; const row = list?.children[index]
-    if (!shown || !row) return
-    if (row.offsetTop < list.scrollTop) list.scrollTop = row.offsetTop
-    else if (row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = row.offsetTop + row.offsetHeight - list.clientHeight
-  }, [shown, key, index])
   const pick = item => {
     if (isBlocked() || composing.current) return
     const node = field.current; const current = node.value
@@ -115,9 +108,10 @@ export function useComposerMenu({ sessionId, text, setText, field, disabled, act
       onCompositionStart: () => { composing.current = true; setInComposition(true) },
       onCompositionEnd: () => { composing.current = false; setInComposition(false); select() },
     },
-    content: shown ? h('div', { ref: panel, id: listId, className: 'deck-composer-menu', role: 'listbox', 'aria-label': trigger.kind === 'mention' ? t('Bots') : 'DS-Bot 命令' },
-      items.length ? items.map((row, at) => h('button', { key: row.key, id: `${listId}-${at}`, type: 'button', role: 'option', tabIndex: -1, 'aria-selected': at === index, onPointerDown: event => event.preventDefault(), onPointerEnter: () => setSelected({ key, index: at }), onClick: () => pick(row) },
-        h(row.icon, { size: 18 }), h('span', null, h('strong', null, row.kind === 'command' ? `/${row.key} · ${row.label}` : row.label), row.description ? h('small', null, row.description) : null)))
-        : h('p', { className: 'deck-composer-empty', role: 'status' }, '这里只提供当前会话可用的 DS-Bot 定时任务和目标动作；当前没有匹配项。')) : null,
+    content: shown ? h('div', { ref: panel, className: 'deck-composer-menu-host' },
+      items.length ? h(ComposerMenu, { id: listId, activeIndex: index, label: trigger.kind === 'mention' ? t('Bots') : 'DS-Bot 命令',
+        items: items.map(row => ({ ...row, title: row.label, subtitle: row.description, code: row.kind === 'command' ? `/${row.key}` : undefined })),
+        onHover: at => setSelected({ key, index: at }), onSelect: pick })
+        : h('div', { className: 'dsb-cmenu', id: listId, role: 'listbox', 'aria-label': 'DS-Bot 命令' }, h('p', { className: 'deck-composer-empty', role: 'status' }, '当前会话没有匹配的命令。'))) : null,
   }
 }

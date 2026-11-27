@@ -2,13 +2,14 @@
 // 复用原词典，在本机语言变更后重新渲染；不设置服务器 prefs 或翻译会话正文。
 import { useLayoutEffect, useState } from 'react'
 import { installLocale } from '@dsbot/client/i18n.js'
-import { createLocale } from '@dsbot/ui/locale.js'
+import { createDeckLocale } from './locale-service.js'
 export function useDeckLocale(language = 'zh') {
   const tag = language === 'system' ? navigator.language : language
   const [installed, setInstalled] = useState(null)
   useLayoutEffect(() => {
-    const dispose = installLocale(createLocale(tag))
-    document.documentElement.lang = tag
+    const locale = createDeckLocale(tag)
+    const dispose = installLocale(locale)
+    document.documentElement.lang = locale.getLocale().active
     setInstalled(tag)
     return dispose
   }, [tag])

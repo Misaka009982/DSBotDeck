@@ -12,10 +12,11 @@
 .deck-resource-error .bt-soft{margin-left:8px}
 .deck-resource-target{display:flex;align-items:center;gap:6px;font-size:12px}
 .deck-resource-target select{min-width:0;max-width:100%;flex:1;color:var(--bt-ink);background:var(--bt-main);border:1px solid var(--bt-line);border-radius:6px;padding:5px}
-.deck-delegation-child{margin:8px 0;padding:8px;border:1px solid var(--bt-line);border-radius:8px}
-.deck-delegation-child>summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;cursor:pointer;overflow-wrap:anywhere}
-.deck-delegation-child>summary>strong{flex:1;min-width:0}
-.deck-delegation-child .deck-delegation-child{margin-left:8px}
+.deck-delegation-row{min-height:44px}
+.deck-delegation-label{display:flex;flex:1;flex-direction:column;min-width:0;gap:2px}
+.deck-delegation-label strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:500}
+.deck-delegation-detail{padding:0 4px}
+.deck-delegation-browser .dsb-sub-bar{padding:6px 4px;flex-wrap:wrap}
 .deck-delegation-events{padding-left:24px;margin:8px 0;max-height:340px;overflow:auto}
 .deck-delegation-events li{padding:5px 0;overflow-wrap:anywhere}
 .deck-delegation-events li>.deck-resource-note{display:block}
@@ -28,11 +29,10 @@
 .deck-workspace .deck-resource-read-state:empty{display:none}
 .deck-workspace .deck-resource-read-state:not(:empty){padding:0 12px}
 .deck-change-detail{padding:8px 0;min-width:0}
-.deck-change-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
-.deck-change-columns section{min-width:0}
-.deck-change-columns strong{font-size:12px;color:var(--bt-ink-2)}
+.deck-recorded-change{min-width:0}
+.deck-recorded-change .dsb-diff-lines{max-height:420px;overflow:auto}
 .deck-change-path{overflow-wrap:anywhere}
-body[data-deck-cached] :is(.deck-delegation-history,.deck-delegation-list,.deck-workspace-preview,.deck-change-columns){visibility:hidden}
+body[data-deck-cached] :is(.deck-delegation-history,.deck-delegation-list,.deck-workspace-preview,.deck-recorded-change){visibility:hidden}
 .deck-workspace-editor{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:8px 12px;border-top:1px solid var(--bt-line)}
 .deck-workspace-input{display:block;box-sizing:border-box;width:100%;min-height:240px;resize:vertical;padding:10px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:13px/1.6 var(--bt-mono,monospace);tab-size:2}
 .deck-draft-shelf{flex:none;max-height:45dvh;overflow:auto;padding:8px 14px;background:var(--bt-main);border-top:1px solid var(--bt-line);font-size:12px;color:var(--bt-ink)}
@@ -44,4 +44,4 @@ body[data-deck-cached] .deck-workspace-editor textarea,body[data-deck-cached] .d
 .bt-panel-grip,.bt-panel :is(button,a,input,textarea,select,[role=tab]){-webkit-app-region:no-drag;app-region:no-drag}
 .deck-resource-confirm{border:1px solid var(--bt-line);border-radius:8px;padding:10px;margin:8px 0}
 body[data-deck-cached] .deck-terminal-screen{visibility:hidden}
-@media(max-width:760px){.deck-change-columns{grid-template-columns:minmax(0,1fr)}.deck-resource-pane{right:4px;width:min(560px,calc(100vw - 24px),calc(100% - 8px))}}
+@media(max-width:760px){.deck-resource-pane{right:4px;width:min(560px,calc(100vw - 24px),calc(100% - 8px))}}

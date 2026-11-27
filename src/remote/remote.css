@@ -29,23 +29,13 @@ body[data-deck-background] .dsb-head::before{background:none}
 .deck-learning-cards .bt-learning-text{min-width:0;overflow-wrap:anywhere}
 /* 原输入框只增补候选层；菜单不覆盖草稿，不跨出缓存权限边界。 */
 .dsb-composer-wrap{position:relative}
-.deck-attachment-rail{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;padding:8px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);min-width:0}
-.deck-attachment-file,.deck-user-file{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;font-size:12px}
-.deck-attachment-file>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
-.deck-attachment-file small,.deck-user-file small{flex:none;color:var(--bt-ink-3)}
+.deck-attachment-rail{display:flex;flex-direction:column;gap:6px;margin:0 0 8px;min-width:0}
+.deck-attachment-items{margin:0;padding:0;border:0;min-width:0}
+.deck-user-files{display:block;margin-top:5px;min-width:0}
 .deck-attachment-note{flex-basis:100%;margin:2px 0;color:var(--bt-ink-3);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .deck-attachment-actions{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
-.deck-user-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:5px;overflow-wrap:anywhere}
-.deck-user-file{padding:4px 6px;border:1px solid var(--bt-line);border-radius:6px}
-.deck-composer-menu{position:absolute;z-index:30;left:0;right:0;bottom:calc(100% + 8px);max-height:min(260px,40dvh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--bt-line);border-radius:12px;padding:5px;background:var(--bt-main);box-shadow:0 10px 30px #0003}
-.deck-composer-menu>button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:8px;padding:9px;background:none;color:var(--bt-ink);text-align:left}
-.deck-composer-menu>button[aria-selected=true]{background:var(--bt-hover)}
-.deck-composer-menu>button>svg{flex:none}
-.deck-composer-menu>button>span{display:flex;flex-direction:column;gap:3px;min-width:0}
-.deck-composer-menu strong{font-size:13px;font-weight:500;overflow-wrap:anywhere}
-.deck-composer-menu small,.deck-composer-empty{font-size:12px;color:var(--bt-ink-3);overflow-wrap:anywhere}
-.deck-composer-empty{margin:8px;line-height:1.7}
-body[data-deck-cached] .deck-composer-menu{display:none}
+.deck-composer-empty{margin:8px;font-size:12px;color:var(--bt-ink-3);line-height:1.7}
+body[data-deck-cached] .deck-composer-menu-host{display:none}
 /* 缺来源不渲染伪跳转；交换读取失败保留明确说明与手动重新读取。 */
 .deck-peer-note{font-size:11px;color:var(--bt-ink-3);margin-left:8px;overflow-wrap:anywhere}
 .deck-exchange-error{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid var(--bt-line);border-radius:10px;padding:12px;color:var(--bt-ink-2);font-size:13px;line-height:1.6}

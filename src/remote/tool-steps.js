@@ -2,6 +2,7 @@
 // 气泡间连续工具只占一条总数；单项展开直接读参数和输出，不执行命令。
 import { createElement as h, useContext, useRef, useState } from 'react'
 import { hostText } from '@dsbot/client/i18n.js'
+import { ToolCardShell } from '@dsbot/ui/tool-view-shared.js'
 import { toolGroupRows } from '../shared/tool-history.ts'
 import { toolCallKey } from '../shared/tool-model.ts'
 import { toolPresentation } from '../shared/tool-display.ts'
@@ -27,16 +28,10 @@ function ToolCall({ tool, index, scope, fullMessages, available, allowed, onDeni
   const view = toolPresentation({ ...tool, label: tool.label ? hostText(tool.label) : null }, completeArgs, roster?.byId?.[tool.reference?.sessionId ?? scope.sessionId]?.workDir)
   const status = tool.outcome !== 'unknown' ? tool.outcome : outputReader.value?.outcome ?? args?.outcome ?? 'unknown'
   const outcome = OUTCOMES[status]
-  return h('details', { ref: node, className: 'deck-tool-call', 'data-outcome': status, onToggle: event => {
-    if (event.currentTarget !== event.target) return
-    setOpen(event.currentTarget.open)
-    if (!event.currentTarget.open) setChangeOpen(false)
-  } },
-    h('summary', { className: 'bt-tread-step deck-tool-call-heading', title: `${view.title} · ${tool.name ?? '工具名未提供'} · ${outcome.text}` },
-      h('span', { className: 'deck-tool-chevron', 'aria-hidden': true }, '›'),
-      h('span', { className: 'bt-tread-step-name' }, h('strong', { className: 'deck-tool-description' }, view.title)),
-      status !== 'success' ? h('span', { className: 'deck-tool-outcome', title: outcome.hint }, outcome.text) : null),
-    open ? h('div', { className: 'deck-tool-call-body' },
+  return h('div', { ref: node, className: 'deck-tool-call', 'data-outcome': status, title: `${view.title} · ${tool.name ?? '工具名未提供'} · ${outcome.text}` },
+    h(ToolCardShell, { label: view.title, phase: status === 'unknown' ? 'unknown' : 'result', isError: status === 'failure', hasBody: true, expanded: open,
+      onToggle: () => { setOpen(value => !value); setChangeOpen(false) },
+      badges: status !== 'success' ? h('span', { className: 'dsb-tool-pill', title: outcome.hint }, outcome.text) : null },
       h('div', { className: 'deck-tool-meta' }, h('code', { className: 'deck-tool-name' }, tool.name ?? '工具名未提供'),
         h('span', null, `调用 ${index + 1} · ${tool.turn === null ? '轮次未提供' : `轮次 ${tool.turn}`} · ${outcome.text}`)),
       !available ? h('p', { className: 'deck-tool-limit' }, '缓存或隐藏期间不读取工具正文。')
@@ -46,7 +41,7 @@ function ToolCall({ tool, index, scope, fullMessages, available, allowed, onDeni
             h(ToolDetailField, { reader: outputReader, field: 'output', name: tool.name }),
             ['write', 'edit', 'apply_patch'].includes(tool.name) && changes.state !== 'missing' ? h('details', { className: 'deck-tool-output', open: changeOpen,
               onToggle: event => { if (event.currentTarget === event.target) setChangeOpen(event.currentTarget.open) } },
-              h('summary', null, '已记录的文件修改'), changeOpen ? h(ChangeDetail, { reference: tool.reference }) : null) : null)) : null)
+              h('summary', null, '已记录的文件修改'), changeOpen && open ? h(ChangeDetail, { reference: tool.reference }) : null) : null)))
 }
 export function ToolSteps({ entry, scope = {}, fullMessages = false }) {
   const [open, setOpen] = useState(false); const [denied, setDenied] = useState(null)

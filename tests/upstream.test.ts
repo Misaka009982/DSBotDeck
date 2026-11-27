@@ -376,7 +376,7 @@ test('新版分页投影保留群成员与附件，刷新最新页不丢已加�
   const text = paintSource(raw, path.join(source, name), source) ?? ''
   assert.equal(text.includes('useSessionFollow'), false)
   assert.equal(text.includes('useRoomChat'), false)
-  const helpers = runInNewContext(`${text.replace(/^export /gm, '')}\n({ adaptRoomItems, mergeLatestPage })`)
+  const helpers = runInNewContext(`${text.replace(/^import .*\r?\n/gm, '').replace(/^export /gm, '')}\n({ adaptRoomItems, mergeLatestPage })`)
   const older = { kind: 'user', id: 'old', time: 1, text: '历史' }
   const latest = { kind: 'bot', id: 'new', time: 2, text: '原回复' }
   const changed = { ...latest, text: '最新回复' }
