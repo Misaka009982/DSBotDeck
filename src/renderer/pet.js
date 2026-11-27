@@ -34,7 +34,7 @@ function App() {
   const model = useRef(snapshot); model.current = snapshot
   const currentColor = useRef(color); currentColor.current = color
   const prefs = snapshot?.servers.find(server => server.id === snapshot.activeServerId)?.team?.prefs
-  useDeckLocale(snapshot?.appearance.language ?? 'zh')
+  useDeckLocale(snapshot?.appearance.language ?? 'system')
   useDeckTheme(snapshot?.appearance, prefs)
   useEffect(() => {
     const off = api.onSnapshot(next => setSnapshot(current => !current || next.revision >= current.revision ? next : current))

@@ -7,13 +7,14 @@ import { test } from 'node:test'
 import { installLocale, language, t } from '../../DS-Bot/ds-bot/src/client/i18n.js'
 const localeSource = await readFile(new URL('../../DS-Bot/app/ui/src/locale.js', import.meta.url), 'utf8')
 const adapterSource = await readFile(new URL('../src/renderer/locale-service.js', import.meta.url), 'utf8')
-function fixture() {
+function fixture(systemLanguage = 'en-US') {
   const reads: string[] = []; const writes: string[] = []
-  const { createLocale } = runInNewContext(`${localeSource.replace(/^export /gm, '')}\n({ createLocale })`, {
+  const navigator = { language: systemLanguage }
+  const { createLocale } = runInNewContext(`${localeSource.replace(/^export /gm, '')}\n;({ createLocale })`, {
     localStorage: { getItem: (key: string) => { reads.push(key); return 'en' }, setItem: (key: string) => writes.push(key), removeItem: (key: string) => writes.push(key) },
   })
-  const { createDeckLocale } = runInNewContext(`${adapterSource.replace(/^import .*\r?\n/gm, '').replace(/^export /gm, '')}\n({ createDeckLocale })`, { createLocale })
-  return { createLocale, createDeckLocale, reads, writes }
+  const { createDeckLocale } = runInNewContext(`${adapterSource.replace(/^import .*\r?\n/gm, '').replace(/^export /gm, '')}\n;({ createDeckLocale })`, { createLocale, navigator })
+  return { createLocale, createDeckLocale, reads, writes, navigator }
 }
 test('Deck简体中文采用原词典，转到后台按钮不受旧英文偏好覆盖', () => {
   const f = fixture()
@@ -28,6 +29,15 @@ test('Deck简体中文采用原词典，转到后台按钮不受旧英文偏好�
     for (const [key, expected] of [['Connect', '连接'], ['Connection', '连接方式'], ['Pair a phone', '配对手机'], ['Paired devices', '已配对设备'], ['Profile', '资料'], ['Model', '模型'], ['Instructions', '说明']]) assert.equal(t(key), expected)
     assert.equal(f.reads.length, 1); assert.deepEqual(f.writes, [])
   } finally { dispose() }
+})
+test('自动语言沿用上游设备识别，中文与英文环境分别呈现对应词典', () => {
+  const f = fixture('zh-CN')
+  for (const [tag, expected, label] of [['zh-CN', 'zh', '转到后台'], ['en-GB', 'en', 'Move to background'], ['zh-TW', 'zh-TW', '轉到後台']]) {
+    f.navigator.language = tag
+    const service = f.createDeckLocale(); const dispose = installLocale(service)
+    try { assert.equal(language(), expected); assert.equal(t('Move to background'), label) } finally { dispose() }
+  }
+  assert.deepEqual(f.reads, []); assert.deepEqual(f.writes, [])
 })
 test('Deck显式切换语言仍遵循本机选择，不写回网页存储', () => {
   const f = fixture()

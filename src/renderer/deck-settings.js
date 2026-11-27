@@ -3,6 +3,7 @@
 import { createElement as h, useEffect, useRef, useState } from 'react'
 import { CloseIcon } from '@dsbot/client/icons.js'
 import { CharacterGrid } from '@dsbot/client/bot-settings.js'
+import { LANGUAGE_OPTIONS } from '@dsbot/ui/locale.js'
 import { ThemeGallery } from './theme-gallery.js'
 import { allThemes } from '@dsbot/themes'
 import { DEFAULT_APP_MARK } from '../shared/app-icon.ts'
@@ -76,9 +77,9 @@ export function DeckSettings({ snapshot, assets, dark, busy, error, run, close }
           [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']].map(([value, label]) => h('option', { key: value, value }, label)))),
         h('p', { className: 'deck-hint' }, '原主题和配色统一用于主窗口、聊天与宠物；只有“跟随系统”自动切换明暗。设置保存在本机，不改变服务器主题；切换服务器也不会换主题。')),
       h('section', { className: 'deck-setting-block', hidden: tab !== 'theme' }, h('h3', null, '原 DS-Bot 界面语言'),
-        h('label', { className: 'deck-field' }, '连接后聊天、Bot 参数与服务器设置使用的语言', h('select', { className: 'bt-input', value: prefs.language ?? 'zh', disabled, onChange: event => act(() => api.appearance({ language: event.target.value })) },
-          [['zh', '简体中文'], ['zh-TW', '繁體中文'], ['en', 'English'], ['ja', '日本語'], ['ko', '한국어'], ['es', 'Español'], ['fr', 'Français'], ['de', 'Deutsch'], ['system', '跟随本机系统']].map(([value, label]) => h('option', { key: value, value }, label)))),
-        h('p', { className: 'deck-hint' }, '使用上游原词典，默认简体中文；不改变服务器配置或 Bot 回复语言。Deck 自身说明保持简体中文，工具原名、模型名和会话内容不强制翻译。')),
+        h('label', { className: 'deck-field' }, '连接后聊天、Bot 参数与服务器设置使用的语言', h('select', { className: 'bt-input', value: prefs.language ?? 'system', disabled, onChange: event => act(() => api.appearance({ language: event.target.value })) },
+          LANGUAGE_OPTIONS.map(([id, label]) => h('option', { key: id, value: id === 'auto' ? 'system' : id }, label ?? '自动（跟随本机系统）')))),
+        h('p', { className: 'deck-hint' }, '自动时跟随本机系统语言，手动选择时以所选语言为准；使用上游原词典，不改变服务器配置或 Bot 回复语言。Deck 自身说明保持简体中文，工具原名、模型名和会话内容不强制翻译。')),
       h('section', { className: 'deck-setting-block', hidden: tab !== 'icon' }, h('h3', null, '程序图标'),
         h('div', { className: 'deck-setting-actions' }, assets?.icon ? h('img', { className: 'deck-icon-preview', src: assets.icon, alt: '当前 Deck 图标' }) : h(BotMark, { look: DEFAULT_APP_MARK, size: 36 }),
           h('button', { type: 'button', className: 'bt-soft', disabled, onClick: () => choose('icon') }, '选择本地图标'),

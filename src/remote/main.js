@@ -7,6 +7,7 @@ import { installLocale } from '@dsbot/client/i18n.js'
 import { createDeckLocale } from '../renderer/locale-service.js'
 import { App } from './app.js'
 import './remote.css'
-installLocale(createDeckLocale('zh-CN'))
-document.documentElement.lang = 'zh-CN'
+const locale = createDeckLocale()
+installLocale(locale)
+document.documentElement.lang = locale.getLocale().active
 createRoot(document.getElementById('root')).render(h(App))

@@ -3,7 +3,7 @@
 import { useLayoutEffect, useState } from 'react'
 import { installLocale } from '@dsbot/client/i18n.js'
 import { createDeckLocale } from './locale-service.js'
-export function useDeckLocale(language = 'zh') {
+export function useDeckLocale(language = 'system') {
   const tag = language === 'system' ? navigator.language : language
   const [installed, setInstalled] = useState(null)
   useLayoutEffect(() => {

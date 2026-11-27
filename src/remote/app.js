@@ -51,7 +51,7 @@ export function App() {
   const [feedLost, setFeedLost] = useState(true)
   const [resourceEpoch, setResourceEpoch] = useState(0)
   const [packet, setPacket] = useState(null)
-  const localeReady = useDeckLocale(status.uiLanguage ?? 'zh')
+  const localeReady = useDeckLocale(status.uiLanguage ?? 'system')
   const cachedRef = useRef(true)
   cachedRef.current = status.cached || feedLost
   const { workspace, openWorkspace } = useRemoteWorkspace({ team, roster, shown, cached: status.cached || feedLost, epoch: resourceEpoch })

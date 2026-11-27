@@ -192,7 +192,7 @@ test('更换隧道入口绑定原服务器，预览地址并保留保存后的�
 })
 test('本机界面语言传到原词典与隔离视图，不写服务器设置', async () => {
   const remote = await source('remote/app.js'); const locale = await source('renderer/deck-locale.js')
-  assert.ok(remote.includes("useDeckLocale(status.uiLanguage ?? 'zh')"))
+  assert.ok(remote.includes("useDeckLocale(status.uiLanguage ?? 'system')"))
   assert.ok(locale.includes('installLocale(locale)')); assert.ok(locale.includes('createDeckLocale(tag)'))
   assert.ok(locale.includes('useLayoutEffect')); assert.equal(locale.includes('set-prefs'), false)
   const views = await source('main/content-views.ts')

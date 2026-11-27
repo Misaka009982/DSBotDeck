@@ -143,7 +143,7 @@ export function App() {
   useEffect(() => { try { localStorage.setItem('dsbotdeck.tree-collapsed', JSON.stringify(collapsed)) } catch {} }, [collapsed])
   const active = snapshot?.servers.find(server => server.id === snapshot.activeServerId)
   const dark = useDeckTheme(snapshot?.appearance, active?.team?.prefs, api.theme)
-  useDeckLocale(snapshot?.appearance.language ?? 'zh')
+  useDeckLocale(snapshot?.appearance.language ?? 'system')
   const toggle = key => setCollapsed(value => ({ ...value, [key]: !value[key] }))
   const run = async (action, close = false) => {
     if (busy) return

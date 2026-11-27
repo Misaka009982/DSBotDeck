@@ -98,6 +98,13 @@ test('本机主题兼容旧外观并只接受原主题目录和三种明暗模�
   for (const theme of ['unknown', '__proto__', 'url(https://example/theme.css)', true, {}]) assert.throws(() => savedAppearance({ ...old, theme }), /主题/)
   for (const themeMode of ['auto', 'server', true, 1]) assert.throws(() => savedAppearance({ ...old, themeMode }), /明暗/)
 })
+test('界面语言默认自动，已有手动语言不被升级或默认回填改写', () => {
+  const client = defaultClient()
+  assert.equal(client.appearance.language, 'system')
+  const { language: _language, ...old } = client.appearance
+  assert.equal(savedAppearance(old).language, 'system')
+  for (const language of ['zh', 'en', 'system']) assert.equal(savedClient({ ...client, appearance: { ...old, language } }).appearance.language, language)
+})
 test('本机素材设置拒绝 URL、越界编号和无效数值', () => {
   const client = defaultClient()
   assert.throws(() => savedClient({ ...client, appearance: { ...client.appearance, iconPath: 'https://example/icon.png' } }))

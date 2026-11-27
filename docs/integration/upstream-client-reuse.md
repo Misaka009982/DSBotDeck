@@ -19,7 +19,7 @@
 | 连续失败与重试、协作提示 | 协作已复用原`EventLine` | 用户要求连续失败默认计数折叠；原FailureCell依赖本机轮次节点且没有等价分组，保留真实诊断记录，不猜失败代码 |
 | 私聊持续目标 | 原`goal.js`面向群目标/本机Agent，语义不同 | 保留/goal进入Bot设置、仅有效steer可运行、手动恢复及原目标回执；不恢复置顶目标条 |
 | Bot、群聊、服务器设置与详情 | 已复用原`Overlays`、设置、详情、任务面板 | 只隐藏明确排除的电脑/浏览器接管；顶部名称快捷设置、头像详情保留用户要求 |
-| 主题、语言、Bot图标 | 已复用原`ThemeCard`、词典、`createLocale`、`BotMark`/`CharacterGrid` | **本轮修复** `createDeckLocale`禁用原网页语言存储，三个Deck窗口只采用本机统一选择；不修改服务器prefs或Bot回复语言 |
+| 主题、语言、Bot图标 | 已复用原`ThemeCard`、词典、`createLocale`、`BotMark`/`CharacterGrid` | **本轮修复** `createDeckLocale`禁用原网页语言存储，三个Deck窗口采用本机统一选择，默认自动跟随设备语言且手动选择优先，语言列表也直接复用原LANGUAGE_OPTIONS；不修改服务器prefs或Bot回复语言 |
 | 多服务器树、隧道更换、配对图像、宠物、窗口与背景设置 | 上游单Host客户端没有等价实现；图标和主题素材已复用 | 保留用户确认的多服务器身份隔离、五类本机设置、窗口尺寸冻结、全窗口背景和宠物规则 |
 
 ## 构建边界

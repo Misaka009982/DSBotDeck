@@ -53,7 +53,7 @@ export interface LocalAssetsView {
   selected: PetSkinView | null
   warnings: string[]
 }
-export const defaultAppearance = (): AppearanceSettings => ({ theme: 'deepseek', themeMode: 'system', language: 'zh', iconPath: null, builtinIcon: null, backgroundPath: null, backgroundCrop: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
+export const defaultAppearance = (): AppearanceSettings => ({ theme: 'deepseek', themeMode: 'system', language: 'system', iconPath: null, builtinIcon: null, backgroundPath: null, backgroundCrop: null, petLibraryPath: null, opacity: 0.25, blur: 0, fit: 'cover' })
 export interface SavedClient {
   version: 1
   servers: SavedServer[]
