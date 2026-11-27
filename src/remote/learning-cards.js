@@ -1,13 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 // 复用原网页学习差异卡；只连接当前私聊的提案和原学习审批接口。
-import { createElement as h, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createElement as h, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { call } from '@dsbot/client/api.js'
 import { ProposalCard } from '@dsbot/client/learning-card.js'
-import { LearningAnswers, learningFailure, learningProposals, learningRequest, learningTarget } from '../shared/learning-model.ts'
+import { LearningAnswers, learningFailure, learningHistoryItems, learningProposals, learningRequest, learningTarget } from '../shared/learning-model.ts'
 import { DeckError } from '../shared/validation.ts'
 import { ResourceContext } from './resource-read.js'
 import { useDetailAvailability } from './tool-detail.js'
 const answers = new LearningAnswers()
+export function useLearningHistory(sessionId, view) {
+  const context = useContext(ResourceContext); const shown = useDetailAvailability()
+  return useMemo(() => {
+    if (!shown || context.cached || context.selection !== sessionId || view.sessionId !== sessionId || view.failed) return view.items
+    try {
+      const target = learningTarget(context.roster, sessionId)
+      return learningHistoryItems(view.items, target, learningProposals(context.roster, target).settled)
+    } catch { return view.items } // 格式错误仍由底部审批区统一提示，不中断聊天历史。
+  }, [sessionId, view.items, view.sessionId, view.failed, context.roster, context.cached, context.selection, shown])
+}
+export function LearningHistoryCard({ sessionId, proposal }) {
+  const context = useContext(ResourceContext)
+  const target = learningTarget(context.roster, sessionId)
+  if (context.cached || context.selection !== sessionId || !target || proposal?.botId !== target.botId || proposal.sessionId !== sessionId
+    || !['approved', 'declined'].includes(proposal.outcome)) return null
+  return h('div', { className: 'deck-learning-cards' }, h('div', { className: 'bt-q-inline' }, h(ProposalCard, { proposal, disabled: true })))
+}
 export function LearningCards({ sessionId }) {
   const context = useContext(ResourceContext); const shown = useDetailAvailability()
   const node = useRef(null); const latest = useRef(null); const request = useRef(null)
@@ -62,8 +79,8 @@ export function LearningCards({ sessionId }) {
     } finally { if (request.current === pending) { request.current = null; setRefreshing(false) } }
   }
   if (!readable) return null
-  const settledIds = new Set(proposals.settled.map(proposal => proposal.id))
-  const cards = [...proposals.settled, ...proposals.pending.filter(proposal => !settledIds.has(proposal.id))]
+  // 已结算记录由聊天历史按原时间呈现；底部只负责待审批及本次回执状态。
+  const cards = proposals.pending
   if (cards.length === 0 && !invalid && !message) return null
   const sending = cards.some(proposal => answers.get(proposal.id)?.phase === 'busy')
   const reason = context.mode !== 'phone' ? '当前配对权限不能批准学习提案；请在服务器处理，或使用手机配对码连接。'

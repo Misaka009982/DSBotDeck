@@ -49,7 +49,40 @@ export function learningProposals(value: unknown, target: LearningTarget | null)
       return [item as LearningProposal]
     })
   }
-  return { pending: read('learning', false), settled: read('learningSettled', true) }
+  const settled = read('learningSettled', true)
+  const settledIds = new Set(settled.map(proposal => proposal.id))
+  return { pending: read('learning', false).filter(proposal => !settledIds.has(proposal.id)), settled }
+}
+const historyTime = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+// 只在已加载的当前会话范围中插入结算卡；不按本机日期删记录，也不把未加载的旧卡搬到末尾。
+export function learningHistoryItems(items: readonly unknown[], target: LearningTarget | null, settled: readonly LearningProposal[]): readonly unknown[] {
+  if (!target || settled.length === 0) return items
+  const start = Math.max(0, items.findLastIndex(value => record(value)?.kind === 'divider'))
+  const boundary = record(items[start])?.kind === 'divider' ? historyTime(record(items[start])?.time) : null
+  const anchors = items.flatMap((value, index) => {
+    const row = record(value); const time = historyTime(row?.time)
+    return index >= start && time !== null && (row?.sessionId === undefined || row.sessionId === target.sessionId) ? [{ index, time }] : []
+  })
+  if (anchors.length === 0) return items
+  const seen = new Set<string>(); const rows: { index: number; time: number; proposal: LearningProposal }[] = []
+  for (const proposal of settled) {
+    if (seen.has(proposal.id) || proposal.botId !== target.botId || proposal.sessionId !== target.sessionId
+      || proposal.outcome !== 'approved' && proposal.outcome !== 'declined') continue
+    seen.add(proposal.id)
+    const proposed = historyTime(proposal.at)
+    // 换段后才处理的旧提案只能落在实际结算的本段，不能借用上一段的消息。
+    const time = proposed !== null && (boundary === null || proposed >= boundary) ? proposed : historyTime(proposal.settledAt)
+    if (time === null || time < anchors[0].time) continue
+    rows.push({ index: anchors.find(anchor => anchor.time > time)?.index ?? items.length, time, proposal })
+  }
+  if (rows.length === 0) return items
+  rows.sort((a, b) => a.index - b.index || a.time - b.time)
+  const result: unknown[] = []; let next = 0
+  for (let index = 0; index <= items.length; index++) {
+    while (rows[next]?.index === index) { const row = rows[next++]; result.push({ kind: 'deck-learning-settled', time: row.time, proposal: row.proposal }) }
+    if (index < items.length) result.push(items[index])
+  }
+  return result
 }
 export function learningRequest(value: unknown, target: LearningTarget, proposal: LearningProposal, approve: boolean): { id: string; approve: boolean } {
   const current = learningTarget(value, target.sessionId)

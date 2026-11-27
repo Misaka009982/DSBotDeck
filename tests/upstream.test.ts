@@ -61,7 +61,7 @@ test('私聊目标只适配固定Bot设置卡片和全量状态刷新，不改�
   }
 })
 test('学习卡复用原差异与批准按钮，接入消息区并更新无revision变化的提案', async () => {
-  const names = ['ds-bot/src/client/learning-card.js', 'app/ui/src/chat.js', 'app/ui/src/team.js']
+  const names = ['ds-bot/src/client/learning-card.js', 'app/ui/src/chat.js', 'app/ui/src/team.js', 'ds-bot/src/client/cells.js']
   const adapted = new Map<string, string>()
   for (const name of names) {
     const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
@@ -78,7 +78,13 @@ test('学习卡复用原差异与批准按钮，接入消息区并更新无revis
   assert.ok(card.includes('busy: busy || disabled, answer')); assert.ok(card.includes('blocks: [rows]')); assert.ok(card.includes('proposal.edits.map(agentEditRows)'))
   assert.ok(card.includes('actions.learningAnswer(proposal.id, approve)')); assert.ok(card.includes("t('Approve')")); assert.ok(card.includes("t('Decline')"))
   const chat = adapted.get(names[1]) ?? ''
-  assert.ok(chat.includes("import { LearningCards } from '@dsbotdeck/learning-cards'"))
+  assert.ok(chat.includes("import { LearningCards, useLearningHistory } from '@dsbotdeck/learning-cards'"))
+  assert.ok(chat.includes('const historyItems = useLearningHistory(sessionId, view)'))
+  assert.ok(chat.includes('h(ChatRows, { items: historyItems, sessionId, roster, actions, useUi: hooks.useUi, clock: true })'))
+  assert.ok(chat.includes('items: pending, sessionId, roster, actions'))
+  const cells = adapted.get(names[3]) ?? ''
+  assert.ok(cells.includes("case 'deck-learning-settled': return h(LearningHistoryCard"))
+  assert.ok(cells.includes("JSON.stringify(['learning', sessionId, row.proposal.id])"))
   assert.ok(chat.indexOf('h(LearningCards, { sessionId })') < chat.indexOf("h('div', { className: 'dsb-composer-root' }"))
   assert.ok(chat.includes('approvalKey, roster.learning, roster.learningSettled]'))
   const team = adapted.get(names[2]) ?? ''

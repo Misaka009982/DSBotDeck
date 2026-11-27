@@ -2,7 +2,7 @@
 // 学习提案只按当前私聊与原提案编号操作，不从按钮状态推断远程保存。
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { LearningAnswers, learningLiveChanges, learningProposals, learningRequest, learningTarget } from '../src/shared/learning-model.ts'
+import { LearningAnswers, learningHistoryItems, learningLiveChanges, learningProposals, learningRequest, learningTarget } from '../src/shared/learning-model.ts'
 const target = { botId: 'bot-a', sessionId: 'part-a' }
 const skill = () => ({ id: 'skill-a', kind: 'skill', botId: 'bot-a', action: 'update', name: 'review', description: '新说明', content: '新内容', previous: { description: '旧说明', content: '旧内容' }, why: '改善核对流程' })
 const agents = () => ({ id: 'agents-a', kind: 'agents', botId: 'bot-a', folder: '/tmp/project', edits: [{ op: 'replace', old: '旧规则', text: '新规则', why: '补充核对条件' }] })
@@ -36,6 +36,67 @@ test('缺旧正文的更新、损坏编辑、重复编号和错误Bot拒绝批�
   assert.throws(() => learningProposals({ ...value, learning: { 'bot-a': [skill(), skill()] } }, target), { code: 'bot/incompatible' })
   const settled = { ...skill(), sessionId: 'part-a', outcome: 'approved' }
   assert.deepEqual(learningProposals({ ...value, learningSettled: { 'bot-a': [settled, { ...agents(), sessionId: 'old-a', outcome: 'declined' }] } }, target).settled, [settled])
+})
+test('已处理学习提案按原时间插入历史，跨日后不排在新消息底部', () => {
+  const yesterday = Date.UTC(2026, 10, 26, 12); const today = yesterday + 86_400_000
+  const before = { kind: 'bot', id: 'before', time: yesterday, text: '昨天的回复' }
+  const after = { kind: 'user', id: 'after', time: today, text: '今天的新消息' }
+  const proposal = { ...skill(), sessionId: target.sessionId, outcome: 'approved' as const, at: yesterday + 1000, settledAt: today + 1000 }
+  const selected = learningProposals({ ...roster(), learning: {}, learningSettled: { 'bot-a': [proposal] } }, target)
+  assert.deepEqual(selected.pending, [])
+  const items = Object.freeze([before, after]); const rows = learningHistoryItems(items, target, selected.settled)
+  assert.equal(rows[0], before); assert.equal(rows[2], after)
+  assert.deepEqual(rows[1], { kind: 'deck-learning-settled', time: proposal.at, proposal })
+  assert.deepEqual(items, [before, after])
+})
+test('旧提案随对应历史页加载才出现，补页和刷新不产生重复卡片', () => {
+  const proposal = { ...skill(), sessionId: target.sessionId, outcome: 'declined' as const, at: 200, settledAt: 300 }
+  const latest = { kind: 'user', id: 'today', time: 1000 }
+  const page = [latest]
+  assert.equal(learningHistoryItems(page, target, [proposal]), page)
+  const earlier = { kind: 'bot', id: 'yesterday', time: 100 }
+  const rows = learningHistoryItems([earlier, ...page], target, [proposal, proposal])
+  assert.equal(rows.length, 3); assert.equal(rows[2], latest)
+  assert.deepEqual(learningHistoryItems([earlier, ...page], target, [proposal]), rows)
+  const refreshed = { ...latest, text: '今天的消息有更新' }
+  const next = learningHistoryItems([earlier, refreshed], target, [proposal])
+  assert.equal(next.length, 3); assert.equal(next[2], refreshed)
+})
+test('历史学习卡限定当前会话分界，旧段来源的提案在本段按真实结算时间定位', () => {
+  const old = { kind: 'bot', sessionId: 'old-a', time: 100 }
+  const divider = { kind: 'divider', time: 1000 }
+  const current = { kind: 'bot', sessionId: target.sessionId, time: 1100 }
+  const newest = { kind: 'user', time: 2000 }
+  const proposal = { ...agents(), sessionId: target.sessionId, outcome: 'approved' as const, at: 200, settledAt: 1200 }
+  const items = [old, divider, current, newest]
+  const rows = learningHistoryItems(items, target, [proposal])
+  assert.deepEqual(rows, [old, divider, current, { kind: 'deck-learning-settled', time: 1200, proposal }, newest])
+  assert.equal(learningHistoryItems(items, null, [proposal]), items)
+  for (const patch of [{ sessionId: 'old-a' }, { botId: 'bot-b' }, { outcome: undefined }, { settledAt: 300 }]) {
+    assert.equal(learningHistoryItems(items, target, [{ ...proposal, ...patch }]), items)
+  }
+})
+test('历史时间不完整不猜最新位置，同一时间保留各提案且不改变原消息顺序', () => {
+  const items = [{ kind: 'bot', time: 100 }, { kind: 'steps' }, { kind: 'user', time: 200 }]
+  const first = { ...skill(), sessionId: target.sessionId, outcome: 'approved' as const, at: 150 }
+  const second = { ...agents(), sessionId: target.sessionId, outcome: 'declined' as const, settledAt: 150 }
+  assert.deepEqual(learningHistoryItems(items, target, [first, second]), [items[0], items[1],
+    { kind: 'deck-learning-settled', time: 150, proposal: first }, { kind: 'deck-learning-settled', time: 150, proposal: second }, items[2]])
+  for (const at of [undefined, NaN, Infinity, -1, '150']) {
+    assert.equal(learningHistoryItems(items, target, [{ ...first, at }]), items)
+  }
+  const empty: unknown[] = []; const untimed = [{ kind: 'user' }]
+  assert.equal(learningHistoryItems(empty, target, [first]), empty)
+  assert.equal(learningHistoryItems(untimed, target, [first]), untimed)
+})
+test('未审批提案不因跨日被隐藏，同编号已结算不能同时成为底部待处理项', () => {
+  const pending = { ...skill(), at: Date.UTC(2026, 10, 26) }
+  const settled = { ...pending, sessionId: target.sessionId, outcome: 'approved' as const }
+  const value = { ...roster(), learning: { 'bot-a': [pending, agents()] } }
+  assert.deepEqual(learningProposals(value, target).pending, [pending, agents()])
+  const selected = learningProposals({ ...value, learningSettled: { 'bot-a': [settled] } }, target)
+  assert.deepEqual(selected.pending, [agents()]); assert.deepEqual(selected.settled, [settled])
+  assert.throws(() => learningRequest({ ...value, learningSettled: { 'bot-a': [settled] } }, target, pending, true), { code: 'bot/stale' })
 })
 test('批准与拒绝只回传原编号及布尔选择，提案内容或当前会话变化不提交', () => {
   const value = roster(); const proposal = learningProposals(value, target).pending[0]

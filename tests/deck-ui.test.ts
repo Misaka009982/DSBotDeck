@@ -4,6 +4,16 @@ import { strict as assert } from 'node:assert'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 const source = (name: string) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8')
+test('学习历史复用只读结算卡，底部只列待处理项，缓存或错误页不混入旧提案', async () => {
+  const cards = await source('remote/learning-cards.js')
+  assert.ok(cards.includes('const cards = proposals.pending'))
+  assert.equal(cards.includes('const cards = [...proposals.settled'), false)
+  assert.ok(cards.includes('learningHistoryItems(view.items, target, learningProposals(context.roster, target).settled)'))
+  assert.ok(cards.includes('!shown || context.cached || context.selection !== sessionId || view.sessionId !== sessionId || view.failed'))
+  assert.ok(cards.includes('h(ProposalCard, { proposal, disabled: true })'))
+  assert.ok(cards.includes('proposal?.botId !== target.botId || proposal.sessionId !== sessionId'))
+  assert.ok(cards.includes('answers.reconcile(target, proposals.settled)'))
+})
 test('本地附件只读用户所选File，隐藏取消且草稿存活与文件编辑合并', async () => {
   const attachments = await source('remote/composer-attachments.js'); const presence = await source('remote/draft-presence.js')
   const editor = await source('remote/workspace-editor.js'); const app = await source('remote/app.js')
