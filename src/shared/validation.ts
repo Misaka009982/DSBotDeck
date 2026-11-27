@@ -62,6 +62,23 @@ export function relayUrl(value: unknown): string {
   }
   return url.toString()
 }
+export function replacementRelayUrl(current: string, value: unknown): string {
+  const previous = new URL(relayUrl(current))
+  if (typeof value !== 'string' || value.length > 2048 || !value.trim()) throw new DeckError('bot/invalid', '请输入新隧道域名或完整地址。')
+  const input = value.trim()
+  if (/[\u0000-\u001f\u007f\s\\?#]/.test(input)) throw new DeckError('bot/invalid', '隧道地址不能包含控制字符、空白、反斜杠、查询参数或片段。')
+  const explicit = /^[a-z][a-z\d+.-]*:\/\//i.test(input)
+  if (!explicit && /[\/@]/.test(input)) throw new DeckError('bot/invalid', '请填写域名（可带端口），或包含协议的完整地址。')
+  let next: URL
+  try { next = new URL(explicit ? input : `${previous.protocol}//${input}`) }
+  catch { throw new DeckError('bot/invalid', '隧道地址无效。') }
+  // 只输入域名时保留协议和端口；只输入来源地址时保留原 WebSocket 路径。
+  if (!explicit && !next.port && !/\]:\d+$|^[^:]+:\d+$/.test(input)) next.port = previous.port
+  if (next.protocol === 'https:') next.protocol = 'wss:'
+  else if (next.protocol === 'http:') next.protocol = 'ws:'
+  if (next.pathname === '/' && !/^wss?:\/\//i.test(input)) next.pathname = previous.pathname
+  return relayUrl(next.toString())
+}
 export function pairingText(value: unknown): string {
   if (typeof value !== 'string' || value.length > 8192 || value.trim() === '') throw new DeckError('bot/invalid', '请粘贴 DS-Bot 配对链接。')
   const input = value.trim()

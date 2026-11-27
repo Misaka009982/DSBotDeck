@@ -6,6 +6,7 @@ import { ChevronDownIcon, ChevronRightIcon, CloseIcon, DotsIcon, GearIcon, Monit
 import { groupEntities, serverLabel, settingsCommand, visibleServers } from '../shared/navigation.ts'
 import { backgroundLevels } from '../shared/appearance.ts'
 import { DEFAULT_APP_MARK } from '../shared/app-icon.ts'
+import { replacementRelayUrl } from '../shared/validation.ts'
 import { DeckSettings } from './deck-settings.js'
 import { useDeckLocale } from './deck-locale.js'
 import { useDeckTheme } from './deck-theme.js'
@@ -23,6 +24,8 @@ function AppIcon({ source, size }) {
 function Sheet({ mode, server, busy, error, run, close }) {
   const [alias, setAlias] = useState(server?.alias ?? '')
   const [uri, setUri] = useState('')
+  const [relay, setRelay] = useState(server?.relay ?? '')
+  const [relayBase, setRelayBase] = useState(server?.relay ?? '')
   const [readingImage, setReadingImage] = useState(false)
   const [imageError, setImageError] = useState(null)
   const imageInput = useRef(null)
@@ -53,19 +56,37 @@ function Sheet({ mode, server, busy, error, run, close }) {
     }
     window.addEventListener('keydown', key); return () => { window.removeEventListener('keydown', key); before?.focus?.() }
   }, [busy])
+  let relayPreview = null; let relayError = null
+  if (mode === 'relay') {
+    try { relayPreview = replacementRelayUrl(relayBase, relay) } catch (failure) { relayError = failure.message }
+  }
   const submit = event => {
     event.preventDefault()
-    if (readingImage) return
+    if (busy || readingImage) return
     if (mode === 'pair' || mode === 'repair') { const offer = uri; setUri(''); void run(() => api.pair(offer, alias, mode === 'repair' ? server.id : undefined), true) }
+    else if (mode === 'relay' && relayPreview) void run(async () => {
+      const result = await api.changeRelay(server.id, relay, relayBase)
+      if (result?.ok) {
+        setRelayBase(result.value.relay); setRelay(result.value.relay)
+        if (!result.value.connected) return { ok: false, error: { message: result.value.message } }
+      }
+      return result
+    }, true)
     else if (mode === 'rename') void run(() => api.rename(server.id, alias), true)
     else if (mode === 'forget') void run(() => api.forget(server.id), true)
   }
-  const title = { pair: '添加远程 DS-Bot', repair: '重新配对', rename: '服务器别名', forget: '忘记服务器' }[mode]
+  const title = { pair: '添加远程 DS-Bot', repair: '重新配对', relay: '更换隧道域名', rename: '服务器别名', forget: '忘记服务器' }[mode]
   return h('div', { className: 'deck-scrim', onPointerDown: event => { if (event.target === event.currentTarget && !busy) close() } },
     h('section', { className: 'deck-sheet', role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'deck-sheet-title' },
       h('header', null, h('h2', { id: 'deck-sheet-title' }, title), button('关闭', close, CloseIcon, { disabled: busy })),
       h('form', { onSubmit: submit },
-        mode !== 'forget' ? h('label', { className: 'deck-field' }, '本机别名', h('input', { ref: first, className: 'bt-input', value: alias, maxLength: 80, disabled: busy, onChange: event => setAlias(event.target.value), autoComplete: 'off' })) : null,
+        mode !== 'forget' && mode !== 'relay' ? h('label', { className: 'deck-field' }, '本机别名', h('input', { ref: first, className: 'bt-input', value: alias, maxLength: 80, disabled: busy, onChange: event => setAlias(event.target.value), autoComplete: 'off' })) : null,
+        mode === 'relay' ? h('div', null,
+          h('p', { className: 'deck-hint' }, `更换「${server.alias}」的连接地址，保留原配对身份、Bot 目录和本机设置。请先让服务器使用新隧道。`),
+          h('label', { className: 'deck-field' }, '已保存地址', h('input', { className: 'bt-input', value: relayBase, readOnly: true, spellCheck: false })),
+          h('label', { className: 'deck-field' }, '新隧道域名或地址', h('input', { ref: first, className: 'bt-input', value: relay, maxLength: 2048, disabled: busy, onChange: event => setRelay(event.target.value), autoComplete: 'off', spellCheck: false, placeholder: 'new.example.com 或 https://new.example.com', 'aria-invalid': Boolean(relayError), 'aria-describedby': 'deck-relay-help' })),
+          h('p', { id: 'deck-relay-help', className: 'deck-hint' }, '只填域名会保留原协议、端口和路径；https/http 地址会转换为 wss/ws。要指定完整连接路径，可填写 ws:// 或 wss:// 地址。'),
+          relayPreview ? h('label', { className: 'deck-field' }, '将连接到', h('input', { className: 'bt-input', value: relayPreview, readOnly: true, spellCheck: false })) : h('p', { className: 'deck-error', role: 'alert' }, relayError)) : null,
         mode === 'pair' || mode === 'repair' ? h('div', { onPaste: pasteImage },
           h('label', { className: 'deck-field' }, '配对链接', h('textarea', { className: 'bt-input', value: uri, maxLength: 8192, rows: 4, spellCheck: false, autoComplete: 'off', disabled: busy || readingImage, placeholder: '粘贴配对链接，或粘贴二维码截图', onChange: event => setUri(event.target.value) })),
           h('div', { className: 'deck-setting-actions' },
@@ -77,7 +98,7 @@ function Sheet({ mode, server, busy, error, run, close }) {
         mode === 'forget' ? h('p', null, `仅删除本客户端保存的「${server.alias}」连接身份，不停止远程 Bot，也不会撤销服务器端的设备授权。撤销旧设备须在服务器本机操作。`) : null,
         error ? h('p', { className: 'deck-error', role: 'alert' }, error) : null,
         h('footer', null, h('button', { type: 'button', className: 'bt-soft', onClick: close, disabled: busy }, '取消'),
-          h('button', { ref: mode === 'forget' ? first : undefined, type: 'submit', className: 'bt-send', disabled: busy || readingImage || (mode === 'pair' || mode === 'repair') && uri.trim() === '' }, busy ? '处理中…' : mode === 'forget' ? '仅忘记本机连接' : '保存')))))
+          h('button', { ref: mode === 'forget' ? first : undefined, type: 'submit', className: 'bt-send', disabled: busy || readingImage || mode === 'relay' && !relayPreview || (mode === 'pair' || mode === 'repair') && uri.trim() === '' }, busy ? '处理中…' : mode === 'forget' ? '仅忘记本机连接' : mode === 'relay' ? '保存并重连' : '保存')))))
 }
 export function App() {
   const [snapshot, setSnapshot] = useState(null)
@@ -164,6 +185,7 @@ export function App() {
               button('服务器操作', () => setMenu(menu === server.id ? null : server.id), DotsIcon, { className: 'deck-icon deck-server-operations', 'aria-expanded': menu === server.id })),
             menu === server.id ? h('div', { className: 'deck-server-menu', role: 'menu' },
               ['ready', 'connecting', 'reconnecting'].includes(server.state) ? h('button', { type: 'button', role: 'menuitem', onClick: () => { setMenu(null); void run(() => api.disconnect(server.id)) } }, '断开本机连接') : h('button', { type: 'button', role: 'menuitem', onClick: () => { setMenu(null); void run(() => api.connect(server.id)) } }, '连接服务器'),
+              h('button', { type: 'button', role: 'menuitem', onClick: () => openSheet('relay', server) }, '更换隧道域名'),
               h('button', { type: 'button', role: 'menuitem', onClick: () => openSheet('repair', server) }, '重新配对'),
               h('button', { type: 'button', role: 'menuitem', onClick: () => openSheet('rename', server) }, '修改本机别名'),
               h('button', { type: 'button', role: 'menuitem', onClick: () => { setMenu(null); void run(() => api.navigate(server.id, { action: 'new-bot' })) } }, '新建 Bot'),

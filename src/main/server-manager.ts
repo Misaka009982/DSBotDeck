@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // 只有主进程可以读取 Vault；对外快照严格排除身份、令牌和配对码。
 import { randomUUID } from 'node:crypto'
-import type { AppearanceSettings, ContentCommand, PetSettings, SavedClient, SavedServer, Selection, Snapshot, WindowState } from '../shared/domain.ts'
+import type { AppearanceSettings, ContentCommand, PetSettings, RelayChangeResult, SavedClient, SavedServer, Selection, Snapshot, WindowState } from '../shared/domain.ts'
 import { emptyCounts } from '../shared/domain.ts'
-import { MAX_SERVERS, DeckError, command, record, selection, text, validServerId } from '../shared/validation.ts'
+import { MAX_SERVERS, DeckError, command, record, replacementRelayUrl, safeMessage, selection, text, validServerId } from '../shared/validation.ts'
 import { makePeer, newIdentity, pairingOffer } from './link-factory.ts'
 import type { PeerEvent, PeerFactory } from './link-factory.ts'
 import { ServerConnection } from './server-connection.ts'
@@ -13,6 +13,7 @@ export class ServerManager {
   private readonly vault: Vault
   private readonly factory: PeerFactory
   private readonly connections = new Map<string, ServerConnection>()
+  private readonly connectionActions = new Set<string>()
   private readonly listeners = new Set<() => void>()
   private readonly startups = new Set<ReturnType<typeof setTimeout>>()
   private revision = 0
@@ -38,6 +39,14 @@ export class ServerManager {
     if (!validServerId(id) || !connection) throw new DeckError('bot/not-found', '此服务器不在客户端配置中。')
     return connection
   }
+  // 地址变更、重配与手动连接互斥；其他服务器及非连接设置继续独立更新。
+  private async connectionAction<T>(id: string, action: () => Promise<T>): Promise<T> {
+    this.connection(id)
+    if (this.closing) throw new DeckError('bot/refused', '客户端正在退出，未开始新的连接操作。')
+    if (this.connectionActions.has(id)) throw new DeckError('bot/refused', '此服务器的连接操作尚未完成，请稍后重试。')
+    this.connectionActions.add(id)
+    try { return await action() } finally { this.connectionActions.delete(id) }
+  }
   private create(config: SavedServer): ServerConnection {
     const connection: ServerConnection = new ServerConnection(config, this.factory, {
       changed: () => this.changed(),
@@ -58,7 +67,7 @@ export class ServerManager {
     if (this.startupError) return
     this.vault.snapshot().servers.forEach((server, index) => {
       if (!server.paired || !server.autoConnect) return
-      const timer = setTimeout(() => { this.startups.delete(timer); const connection = this.connections.get(server.id); if (!this.closing && connection) void connection.connect().catch(() => {}) }, index * 250)
+      const timer = setTimeout(() => { this.startups.delete(timer); const connection = this.connections.get(server.id); if (!this.closing && connection) void this.connectionAction(server.id, () => connection.connect()).catch(() => {}) }, index * 250)
       this.startups.add(timer)
     })
   }
@@ -76,6 +85,14 @@ export class ServerManager {
     return { revision: this.revision, servers, activeServerId: this.active, selected: this.currentSelection(), pet: local.pet, appearance: { ...appearance, builtinIcon: builtinIcon ? { look: builtinIcon.look } : null }, tasks, counts, startupError: this.startupError }
   }
   async pair(input: unknown, alias: unknown, repairId?: unknown): Promise<string> {
+    if (repairId !== undefined && repairId !== null) {
+      if (!validServerId(repairId)) throw new DeckError('bot/invalid', '重新配对的目标无效。')
+      return this.connectionAction(repairId, () => this.pairServer(input, alias, repairId))
+    }
+    return this.pairServer(input, alias)
+  }
+  private async pairServer(input: unknown, alias: unknown, repairId?: unknown): Promise<string> {
+    if (this.closing) throw new DeckError('bot/refused', '客户端正在退出，未开始新的配对。')
     if (this.startupError) throw new DeckError('vault/unavailable', this.startupError)
     const offer = pairingOffer(input)
     const mode = offer.device === 'browser' ? 'browser' : 'phone'
@@ -108,7 +125,7 @@ export class ServerManager {
     if (connection) connection.update(config)
     else connection = this.create(config)
     this.active = config.id; this.changed()
-    try { await connection.connect(offer.code) }
+    try { if (!this.closing) await connection.connect(offer.code) }
     finally {
       const main = connection.view().team?.entities.find(entity => entity.main) ?? connection.view().team?.entities[0]
       if (main) {
@@ -119,18 +136,54 @@ export class ServerManager {
     return config.id
   }
   async connect(id: string): Promise<void> {
-    const connection = this.connection(id)
-    await this.vault.update(value => { const server = value.servers.find(item => item.id === id); if (server) server.autoConnect = true; return value }, 'server-connect')
-    const saved = this.vault.snapshot().servers.find(item => item.id === id)
-    if (saved) connection.update(saved)
-    await connection.connect()
+    return this.connectionAction(id, async () => {
+      const connection = this.connection(id)
+      await this.vault.update(value => { const server = value.servers.find(item => item.id === id); if (server) server.autoConnect = true; return value }, 'server-connect')
+      const saved = this.vault.snapshot().servers.find(item => item.id === id)
+      if (saved) connection.update(saved)
+      if (!this.closing) await connection.connect()
+    })
   }
   async disconnect(id: string): Promise<void> {
-    const connection = this.connection(id)
-    await connection.disconnect()
-    await this.vault.update(value => { const server = value.servers.find(item => item.id === id); if (server) server.autoConnect = false; return value }, 'server-disconnect')
-    const saved = this.vault.snapshot().servers.find(item => item.id === id)
-    if (saved) connection.update(saved)
+    return this.connectionAction(id, async () => {
+      const connection = this.connection(id)
+      await connection.disconnect()
+      await this.vault.update(value => { const server = value.servers.find(item => item.id === id); if (server) server.autoConnect = false; return value }, 'server-disconnect')
+      const saved = this.vault.snapshot().servers.find(item => item.id === id)
+      if (saved) connection.update(saved)
+    })
+  }
+  async changeRelay(id: string, input: unknown, expectedRelay: unknown): Promise<RelayChangeResult> {
+    return this.connectionAction(id, async () => {
+      if (this.startupError) throw new DeckError('vault/unavailable', this.startupError)
+      const connection = this.connection(id)
+      const next = replacementRelayUrl(connection.settings().relayUrl, input)
+      const target = (value: SavedClient): SavedServer => {
+        const server = value.servers.find(item => item.id === id)
+        if (!server) throw new DeckError('bot/not-found', '此服务器已被移除，没有新增或替换连接。')
+        if (server.relayUrl !== expectedRelay) throw new DeckError('bot/refused', '服务器地址已变化，请关闭并重新打开此窗口后修改。')
+        if (value.servers.some(item => item.id !== id && item.hostDeviceId === server.hostDeviceId && item.relayUrl === next)) throw new DeckError('bot/invalid', '此主机在新地址已有连接，请使用已有服务器条目。')
+        return server
+      }
+      target(this.vault.snapshot())
+      // 先让旧请求失效；只有加密保存成功后才使用新地址，失败时仍保留旧配置。
+      await connection.disconnect()
+      await this.vault.update(value => {
+        if (this.closing) throw new DeckError('bot/refused', '客户端正在退出，未保存新隧道地址。')
+        const server = target(value)
+        server.relayUrl = next; server.autoConnect = true
+        return value
+      }, 'server-relay')
+      const saved = this.vault.snapshot().servers.find(item => item.id === id)
+      if (saved) connection.update(saved)
+      let failure: string | null = null
+      if (!this.closing) {
+        try { await connection.connect() } catch (error) { failure = safeMessage(error) }
+      }
+      const view = connection.view()
+      const connected = view.state === 'ready' && !view.cached
+      return { relay: next, connected, message: connected ? null : `隧道地址已保存，连接尚未就绪。${failure ?? view.error ?? '可以继续修改地址或稍后重连。'}` }
+    })
   }
   async rename(id: string, alias: unknown): Promise<void> {
     const connection = this.connection(id)
@@ -141,13 +194,15 @@ export class ServerManager {
     if (saved) connection.update(saved)
   }
   async forget(id: string): Promise<void> {
-    const connection = this.connection(id)
-    await connection.disconnect()
-    await this.vault.update(value => { value.servers = value.servers.filter(server => server.id !== id); if (value.selected?.serverId === id) value.selected = null; return value }, 'server-forget')
-    this.connections.delete(id)
-    if (this.chosen?.serverId === id) this.chosen = null
-    if (this.active === id) this.active = [...this.connections.keys()][0] ?? null
-    this.changed()
+    return this.connectionAction(id, async () => {
+      const connection = this.connection(id)
+      await connection.disconnect()
+      await this.vault.update(value => { value.servers = value.servers.filter(server => server.id !== id); if (value.selected?.serverId === id) value.selected = null; return value }, 'server-forget')
+      this.connections.delete(id)
+      if (this.chosen?.serverId === id) this.chosen = null
+      if (this.active === id) this.active = [...this.connections.keys()][0] ?? null
+      this.changed()
+    })
   }
   async select(input: unknown): Promise<void> {
     const selected = selection(input)

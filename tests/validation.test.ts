@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { PICKER_SHAPES, CHARACTER_COLORS } from '@dsbot/characters'
 import { allThemes } from '@dsbot/themes'
-import { backgroundCrop, command, frozenRequest, localMark, pairingText, relayUrl, savedAppearance, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
+import { backgroundCrop, command, frozenRequest, localMark, pairingText, relayUrl, replacementRelayUrl, savedAppearance, savedBuiltinIcon, savedClient, selection, validServerId } from '../src/shared/validation.ts'
 import { defaultAppearance, defaultClient } from '../src/shared/domain.ts'
 
 test('服务器保留字和无效目标被拒绝', () => {
@@ -17,6 +17,22 @@ test('中转地址不接受账号、查询令牌或错误协议', () => {
   assert.throws(() => relayUrl('wss://user:password@relay.example/v1/link'))
   assert.throws(() => relayUrl('wss://relay.example/v1/link?token=fictional'))
   assert.throws(() => relayUrl('https://relay.example/v1/link'))
+})
+test('更换域名保留原协议端口和路径，填写来源或完整地址可明确覆盖', () => {
+  const original = 'wss://old.example:8443/v1/link'
+  assert.equal(replacementRelayUrl(original, ' new.example '), 'wss://new.example:8443/v1/link')
+  assert.equal(replacementRelayUrl(original, 'new.example:443'), 'wss://new.example/v1/link')
+  assert.equal(replacementRelayUrl(original, 'https://new.example/'), 'wss://new.example/v1/link')
+  assert.equal(replacementRelayUrl(original, 'https://new.example/proxy/link'), 'wss://new.example/proxy/link')
+  assert.equal(replacementRelayUrl(original, 'ws://localhost:8787/custom/link'), 'ws://localhost:8787/custom/link')
+  assert.equal(replacementRelayUrl(original, 'wss://new.example/'), 'wss://new.example/')
+  assert.equal(replacementRelayUrl('ws://old.example:8787/v1/link', '[::1]'), 'ws://[::1]:8787/v1/link')
+  assert.equal(replacementRelayUrl(original, 'http://localhost:8787'), 'ws://localhost:8787/v1/link')
+})
+test('新隧道拒绝配对码、账号、查询片段及含混输入，不静默删掉敏感字段', () => {
+  for (const address of [null, true, '', ' ', 'a'.repeat(2049), '\u0000new.example', 'new.example\u007f', 'new.example:70000', '//new.example', '/relative', 'new.example/path', 'new.example\\\\path', 'new.\nexample', 'https://user:password@new.example', 'https://new.example/?token=fictional', 'https://new.example/#pair=fictional', 'https://new.example/?', 'https://new.example/#', 'file:///C:/fixture', 'ftp://new.example', 'dsbot://pair?v=1']) {
+    assert.throws(() => replacementRelayUrl('wss://old.example/v1/link', address))
+  }
 })
 test('浏览器配对只取片段里的原 URI，不把片段带进网络路径', () => {
   const uri = 'dsbot://pair?v=1&device=browser'

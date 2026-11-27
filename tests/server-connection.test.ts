@@ -47,6 +47,51 @@ test('旧连接的迟到事件不污染新连接，断开保留真实缓存', as
     assert.equal(connection.view().counts.red, 0)
   } finally { await connection.disconnect() }
 })
+test('隧道地址只能断开后更新，原主机与客户端身份及配对权限不可替换', async () => {
+  const initial = config(); const connection = new ServerConnection(initial, () => new FixturePeer(), { changed: () => {}, paired: async () => {} })
+  try {
+    await connection.connect()
+    assert.throws(() => connection.update({ ...initial, relayUrl: 'wss://new.example/v1/link' }), /先断开/)
+    await connection.disconnect()
+    for (const patch of [{ hostKey: 'other-host-key' }, { hostDeviceId: 'other-host' }, { mode: 'browser' as const }]) {
+      assert.throws(() => connection.update({ ...initial, ...patch }), /身份/)
+    }
+    for (const key of ['deviceId', 'publicKey', 'privateKey', 'accessToken'] as const) {
+      assert.throws(() => connection.update({ ...initial, identity: { ...initial.identity, [key]: 'fictional-other' } }), /身份/)
+    }
+    connection.update({ ...initial, relayUrl: 'wss://new.example/v1/link' })
+    assert.deepEqual(connection.settings(), { ...initial, relayUrl: 'wss://new.example/v1/link' })
+  } finally { await connection.disconnect() }
+})
+test('更换隧道后旧读取、写入回执和事件均失效，不重放旧写入', async () => {
+  const peers: FixturePeer[] = []; const addresses: string[] = []
+  const connection = new ServerConnection(config(), server => { const peer = new FixturePeer(); peers.push(peer); addresses.push(server.relayUrl); return peer }, { changed: () => {}, paired: async () => {} })
+  try {
+    await connection.connect(); const first = peers[0]; const token = connection.token(); assert.ok(token)
+    let releaseState = (_value: unknown): void => {}; let releaseWrite = (_value: unknown): void => {}
+    const oldWrite = new Promise<unknown>(resolve => { releaseWrite = resolve })
+    first.stateReply = new Promise<unknown>(resolve => { releaseState = resolve })
+    const originalRpc = first.rpc.bind(first)
+    first.rpc = async <T>(method: string, params: unknown): Promise<T> => {
+      if ((params as { endpoint: string }).endpoint === 'send') { first.calls.push('send'); return await oldWrite as T }
+      return originalRpc<T>(method, params)
+    }
+    const reading = connection.poll()
+    const writing = assert.rejects(connection.call('send', { botId: 'bot-a', text: '虚构消息' }), /旧连接/)
+    await connection.disconnect()
+    connection.update({ ...connection.settings(), relayUrl: 'wss://new.example/v1/link' })
+    await connection.connect()
+    releaseState({ ok: true, value: { revision: 99, bots: [{ id: 'wrong-bot', name: '迟到旧内容' }], rooms: [] } })
+    releaseWrite({ ok: true, value: { sent: true } })
+    await reading; await writing
+    first.emit({ event: 'notice', data: { kind: 'message', botId: 'bot-a', seq: 1 } }); await first.close()
+    assert.deepEqual(addresses, ['wss://relay.example/v1/link', 'wss://new.example/v1/link'])
+    assert.equal(connection.valid(token), false); assert.equal(connection.view().cached, false)
+    assert.equal(connection.view().team?.entities[0].name, 'Chief'); assert.equal(connection.view().counts.blue, 0)
+    assert.equal(first.calls.filter(endpoint => endpoint === 'send').length, 1)
+    assert.equal(peers[1].calls.includes('send'), false)
+  } finally { await connection.disconnect() }
+})
 test('同代次同 revision 的旧状态回包不能覆盖新运行状态', async () => {
   const peer = new FixturePeer()
   const connection = new ServerConnection(config(), () => peer, { changed: () => {}, paired: async () => {} })

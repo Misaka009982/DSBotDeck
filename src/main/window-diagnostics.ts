@@ -13,7 +13,7 @@ const REASONS = [
   'show', 'hide', 'focus', 'blur', 'ready-to-show', 'tracker-init', 'close', 'before-quit', 'flush', 'window-layout', 'user-resize', 'user-resize-end', 'none',
 ] as const
 const SOURCES = [
-  'server-paired', 'server-pair', 'server-connect', 'server-disconnect', 'server-rename', 'server-forget',
+  'server-paired', 'server-pair', 'server-connect', 'server-disconnect', 'server-rename', 'server-relay', 'server-forget',
   'selection', 'content-selection', 'follow', 'pet-settings', 'pet-position', 'appearance-settings',
   'window-state', 'file-observer', 'unspecified',
 ] as const

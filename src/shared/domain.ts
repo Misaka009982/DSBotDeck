@@ -21,6 +21,7 @@ export interface SavedServer {
   autoConnect: boolean
   unfollowed: string[]
 }
+export interface RelayChangeResult { relay: string; connected: boolean; message: string | null }
 export interface Selection { serverId: string; kind: EntityKind; id: string }
 export interface LocalMark { shape: string; color: string }
 export interface BuiltinIcon { look: LocalMark; png: string }

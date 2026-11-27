@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('dsbotDeck', {
   connect: (serverId: string) => invoke('connect', { serverId }),
   disconnect: (serverId: string) => invoke('disconnect', { serverId }),
   rename: (serverId: string, alias: string) => invoke('rename', { serverId, alias }),
+  changeRelay: (serverId: string, address: string, expectedRelay: string) => invoke('change-relay', { serverId, address, expectedRelay }),
   forget: (serverId: string) => invoke('forget', { serverId }),
   select: (value: Selection) => invoke('select', value),
   navigate: (serverId: string, value: ContentCommand) => invoke('navigate', { serverId, command: value }),

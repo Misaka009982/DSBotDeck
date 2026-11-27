@@ -281,6 +281,7 @@ async function start(): Promise<void> {
       case 'connect': return manager.connect(id)
       case 'disconnect': return manager.disconnect(id)
       case 'rename': return manager.rename(id, args.alias)
+      case 'change-relay': return manager.changeRelay(id, args.address, args.expectedRelay)
       case 'forget':
         if (views?.hasDrafts(id)) throw new DeckError('bot/refused', '移除服务器前请先处理或丢弃其未保存文件编辑。')
         await manager.forget(id); views?.remove(id); return null

@@ -48,7 +48,10 @@ export class ServerConnection {
   id(): string { return this.config.id }
   settings(): SavedServer { return structuredClone(this.config) }
   update(config: SavedServer): void {
-    if (config.id !== this.config.id || config.hostKey !== this.config.hostKey || config.identity.publicKey !== this.config.identity.publicKey) throw new DeckError('bot/invalid', '不能隐式替换已绑定的服务器身份。')
+    if (config.id !== this.config.id || config.hostKey !== this.config.hostKey || config.hostDeviceId !== this.config.hostDeviceId || config.mode !== this.config.mode
+      || config.identity.deviceId !== this.config.identity.deviceId || config.identity.publicKey !== this.config.identity.publicKey
+      || config.identity.privateKey !== this.config.identity.privateKey || config.identity.accessToken !== this.config.identity.accessToken) throw new DeckError('bot/invalid', '不能隐式替换已绑定的服务器身份。')
+    if (config.relayUrl !== this.config.relayUrl && !this.stopped) throw new DeckError('bot/refused', '更换隧道地址前必须先断开旧连接。')
     this.config = structuredClone(config); this.reproject(); this.hooks.changed()
   }
   view(): ServerView {

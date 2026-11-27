@@ -21,8 +21,9 @@ import { changePage } from '../src/shared/change-model.ts'
 import { workspaceDirectory, workspaceFile, workspaceRoot } from '../src/shared/workspace-model.ts'
 import type { StringCipher } from '../src/main/vault.ts'
 class FixtureCipher implements StringCipher {
+  available = true
   private readonly key = randomBytes(32)
-  isEncryptionAvailable(): boolean { return true }
+  isEncryptionAvailable(): boolean { return this.available }
   encryptString(value: string): Buffer {
     const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', this.key, iv)
     const bytes = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
@@ -37,11 +38,13 @@ class FixturePeer implements Peer {
   readonly sent: { endpoint: string; payload: unknown }[] = []
   approvalError: string | null = null
   resourceError: string | null = null
+  connectError: Error | null = null
+  closed = false
   readonly resourceReplies = new Map<string, unknown>()
   private readonly target: string
   constructor(target: string) { this.target = target }
-  async connect(): Promise<void> {}
-  async close(): Promise<void> {}
+  async connect(): Promise<void> { if (this.connectError) throw this.connectError }
+  async close(): Promise<void> { this.closed = true }
   reason(): unknown { return null }
   probe(): void {}
   onEvent(_listener: (entry: PeerEvent) => void): () => void { return () => {} }
@@ -63,16 +66,17 @@ const saved = (id: string): SavedServer => {
   const host = newIdentity()
   return { id, alias: id, relayUrl: 'wss://relay.example/v1/link', hostDeviceId: host.deviceId, hostKey: host.publicKey, mode: 'phone', identity: newIdentity(), paired: true, autoConnect: false, unfollowed: [] }
 }
-async function withClient(body: (manager: ServerManager, peers: Map<string, FixturePeer>) => Promise<void>): Promise<void> {
+async function withClient(body: (manager: ServerManager, peers: Map<string, FixturePeer>, storage: { vault: Vault; cipher: FixtureCipher; file: string }) => Promise<void>, options: { servers?: SavedServer[]; configure?: (server: SavedServer, peer: FixturePeer, pairingCode?: string) => void } = {}): Promise<void> {
   const directory = await mkdtemp(path.join(tmpdir(), 'dsbotdeck-integration-'))
   let manager: ServerManager | null = null
   try {
-    const vault = new Vault(path.join(directory, 'client.vault.json'), new FixtureCipher()); await vault.load()
-    await vault.update(value => ({ ...value, servers: [saved('server-a'), saved('server-b')] }))
+    const file = path.join(directory, 'client.vault.json'); const cipher = new FixtureCipher()
+    const vault = new Vault(file, cipher); await vault.load()
+    await vault.update(value => ({ ...value, servers: options.servers ?? [saved('server-a'), saved('server-b')] }))
     const peers = new Map<string, FixturePeer>()
-    manager = new ServerManager(vault, server => { const peer = new FixturePeer(server.id); peers.set(server.id, peer); return peer })
+    manager = new ServerManager(vault, (server, pairingCode) => { const peer = new FixturePeer(server.id); options.configure?.(server, peer, pairingCode); peers.set(server.id, peer); return peer })
     await manager.connect('server-a'); await manager.connect('server-b')
-    await body(manager, peers)
+    await body(manager, peers, { vault, cipher, file })
   } finally { await manager?.stop(); await rm(directory, { recursive: true, force: true }) }
 }
 test('两个真实连接对象使用隔离身份，公开快照没有链路私钥或令牌', async () => {
@@ -81,6 +85,109 @@ test('两个真实连接对象使用隔离身份，公开快照没有链路私�
     assert.notEqual(a.identity.deviceId, b.identity.deviceId)
     const snapshot = JSON.stringify(manager.snapshot())
     for (const secret of [a.identity.privateKey, b.identity.privateKey, a.identity.accessToken, b.identity.accessToken]) assert.equal(snapshot.includes(secret), false)
+  })
+})
+test('更换隧道持久化原设备身份、权限及选择，只重连目标服务器', async () => {
+  for (const mode of ['phone', 'browser'] as const) {
+    const first = { ...saved('server-a'), mode }
+    const opened: { server: SavedServer; pairingCode?: string }[] = []
+    await withClient(async (manager, peers, { file, cipher }) => {
+      await manager.rename('server-a', '我的服务器'); await manager.follow('server-a', 'bot:server-a-bot', false)
+      await manager.select({ serverId: 'server-a', kind: 'bot', id: 'server-a-bot' })
+      const connection = manager.connection('server-a'); const before = connection.settings()
+      const oldPeer = peers.get('server-a'); const otherPeer = peers.get('server-b'); const otherRequests = otherPeer?.sent.length
+      const oldToken = connection.token(); assert.ok(oldToken)
+      const selection = manager.currentSelection(); const other = manager.connection('server-b').settings()
+      const changed = await manager.changeRelay('server-a', 'new.example', before.relayUrl)
+      assert.deepEqual(changed, { relay: 'wss://new.example/v1/link', connected: true, message: null })
+      assert.equal(manager.connection('server-a'), connection); assert.equal(connection.valid(oldToken), false)
+      assert.equal(oldPeer?.closed, true); assert.notEqual(peers.get('server-a'), oldPeer)
+      assert.equal(peers.get('server-b'), otherPeer); assert.equal(otherPeer?.closed, false); assert.equal(otherPeer?.sent.length, otherRequests)
+      const expected = { ...before, relayUrl: changed.relay, autoConnect: true }
+      assert.deepEqual(connection.settings(), expected); assert.deepEqual(manager.connection('server-b').settings(), other)
+      assert.deepEqual(manager.currentSelection(), selection); assert.equal(manager.activeServer(), 'server-a')
+      assert.equal(connection.view().team?.entities[0].followed, false)
+      assert.deepEqual(opened.at(-1), { server: expected, pairingCode: undefined })
+      const restored = await new Vault(file, cipher).load()
+      assert.deepEqual(restored.servers.find(server => server.id === 'server-a'), expected); assert.deepEqual(restored.selected, selection)
+      for (const secret of [before.identity.privateKey, before.identity.accessToken, before.hostKey]) assert.equal(JSON.stringify(changed).includes(secret), false)
+    }, { servers: [first, saved('server-b')], configure: (server, _peer, pairingCode) => { opened.push({ server: structuredClone(server), pairingCode }) } })
+  }
+})
+test('非法地址、过期表单及重复主机地址在断开前拒绝，不改原配置', async () => {
+  const first = saved('server-a'); const second = { ...saved('server-b'), hostKey: first.hostKey, hostDeviceId: first.hostDeviceId, relayUrl: 'wss://duplicate.example/v1/link' }
+  await withClient(async (manager, peers, { vault }) => {
+    const before = vault.snapshot(); const connection = manager.connection('server-a'); const token = connection.token(); assert.ok(token)
+    const peer = peers.get('server-a')
+    await assert.rejects(manager.changeRelay('server-a', 'https://new.example/?token=fictional', first.relayUrl), /查询参数/)
+    await assert.rejects(manager.changeRelay('server-a', 'new.example', 'wss://outdated.example/v1/link'), /地址已变化/)
+    await assert.rejects(manager.changeRelay('server-a', 'duplicate.example', first.relayUrl), /已有连接/)
+    assert.equal(connection.valid(token), true); assert.equal(peers.get('server-a'), peer); assert.equal(peer?.closed, false)
+    assert.deepEqual(vault.snapshot(), before)
+  }, { servers: [first, second] })
+})
+test('隧道变更加密保存失败保留旧地址和身份，不创建新连接', async () => {
+  await withClient(async (manager, peers, { vault, cipher, file }) => {
+    const before = vault.snapshot(); const connection = manager.connection('server-a'); const settings = connection.settings(); const oldPeer = peers.get('server-a')
+    cipher.available = false
+    await assert.rejects(manager.changeRelay('server-a', 'new.example', settings.relayUrl), /加密不可用/)
+    assert.deepEqual(vault.snapshot(), before); assert.deepEqual(connection.settings(), settings)
+    assert.equal(peers.get('server-a'), oldPeer); assert.equal(connection.view().cached, true)
+    cipher.available = true
+    assert.deepEqual(await new Vault(file, cipher).load(), before)
+    await manager.connect('server-a'); assert.equal(connection.view().cached, false); assert.equal(connection.view().relay, settings.relayUrl)
+  })
+})
+test('新隧道不可达明确返回已保存，保留缓存且可再次修改，无需消费配对码', async () => {
+  await withClient(async (manager, _peers, { file, cipher }) => {
+    const connection = manager.connection('server-a'); const before = connection.settings(); const entities = connection.view().team?.entities
+    const changed = await manager.changeRelay('server-a', 'offline.example', before.relayUrl)
+    assert.equal(changed.connected, false); assert.match(changed.message ?? '', /地址已保存/)
+    assert.equal(connection.view().cached, true); assert.deepEqual(connection.view().team?.entities, entities)
+    assert.deepEqual(connection.settings().identity, before.identity); assert.equal(connection.settings().paired, true)
+    const loaded = await new Vault(file, cipher).load()
+    assert.equal(loaded.servers.find(server => server.id === 'server-a')?.relayUrl, changed.relay)
+    await assert.rejects(manager.changeRelay('server-a', 'next.example', before.relayUrl), /地址已变化/)
+    const recovered = await manager.changeRelay('server-a', 'next.example', changed.relay)
+    assert.equal(recovered.connected, true); assert.equal(connection.view().relay, 'wss://next.example/v1/link')
+  }, { configure: (server, peer, pairingCode) => {
+    assert.equal(pairingCode, undefined)
+    if (server.relayUrl === 'wss://offline.example/v1/link') peer.connectError = Object.assign(new Error('虚构链路故障'), { code: 'SERVER_UNREACHABLE' })
+  } })
+})
+test('隧道切换中同服务器连接操作互斥，别名与另一服务器仍可更新', async () => {
+  await withClient(async (manager, peers) => {
+    const connection = manager.connection('server-a'); const before = connection.settings(); const peer = peers.get('server-a'); assert.ok(peer)
+    let release = (): void => {}; let entered = (): void => {}
+    const blocked = new Promise<void>(resolve => { release = resolve })
+    const closing = new Promise<void>(resolve => { entered = resolve })
+    peer.close = async () => { entered(); await blocked }
+    const changing = manager.changeRelay('server-a', 'new.example', before.relayUrl)
+    try {
+      await closing
+      await assert.rejects(manager.changeRelay('server-a', 'another.example', before.relayUrl), /连接操作尚未完成/)
+      await assert.rejects(manager.connect('server-a'), /连接操作尚未完成/)
+      await assert.rejects(manager.disconnect('server-a'), /连接操作尚未完成/)
+      await assert.rejects(manager.forget('server-a'), /连接操作尚未完成/)
+      await assert.rejects(manager.pair('fictional-pairing', '', 'server-a'), /连接操作尚未完成/)
+      await manager.rename('server-a', '保留的新别名')
+      await manager.disconnect('server-b'); assert.equal(manager.connection('server-b').view().state, 'disconnected')
+    } finally { release() }
+    assert.equal((await changing).connected, true)
+    assert.deepEqual(connection.settings(), { ...before, alias: '保留的新别名', relayUrl: 'wss://new.example/v1/link', autoConnect: true })
+  })
+})
+test('隧道切换等待关闭期间退出，不保存新地址或重新建立连接', async () => {
+  await withClient(async (manager, peers, { vault }) => {
+    const before = vault.snapshot(); const settings = manager.connection('server-a').settings(); const peer = peers.get('server-a'); assert.ok(peer)
+    let release = (): void => {}; let entered = (): void => {}
+    const blocked = new Promise<void>(resolve => { release = resolve }); const closing = new Promise<void>(resolve => { entered = resolve })
+    peer.close = async () => { entered(); await blocked }
+    const changing = assert.rejects(manager.changeRelay('server-a', 'new.example', settings.relayUrl), /正在退出/)
+    try { await closing; await manager.stop() } finally { release() }
+    await changing
+    assert.deepEqual(vault.snapshot(), before); assert.equal(peers.get('server-a'), peer)
+    assert.equal(manager.connection('server-a').view().state, 'disconnected')
   })
 })
 test('本机外观和宠物配置经真实身份库保存，不改变配对身份或发送远程请求', async () => {
