@@ -23,7 +23,7 @@ src/remote/tool-steps.js、tool-detail.js 与纯呈现模型独立实现气泡�
 真实说明、脱敏参数/输出的有界读取；复用原任务样式、主题和代码复制，
 不复制增补工作树或不可用的 Agents 组件，不执行记录里的命令。
 src/remote/private-goal.js 独立适配已核对的私聊目标协议，在原 Bot 设置
-Card 中显示目标和控制，并给当前私聊增加状态条；目标仍由服务器执行。
+Card 中显示目标和控制，由当前私聊的 /goal 按需打开；目标仍由服务器执行。
 src/remote/peer-event.js 只适配服务器公开来源；原交换和详情仍由上游组件显示。
 图标与宠物的 BotMark 使用 DS-Bot 自有素材，仅说明所连接的产品。
 默认应用图标从上游 characterMarkup 的 star/aurora 原五角星渐变生成，

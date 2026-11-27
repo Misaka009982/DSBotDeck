@@ -3,6 +3,11 @@
 .deck-remote-frame{position:relative;display:flex;flex-direction:column;height:100vh;height:100dvh;min-width:0;min-height:0}
 .deck-remote-controls{display:contents;margin:0;padding:0;border:0;min-width:0}
 .deck-remote-frame>.dsb-main,.deck-remote-controls>.dsb-main{flex:1;min-height:0}
+/* 上游 no-drag 仅匹配 dsb-frame；Deck 的独立容器也必须排除交互控件。 */
+.deck-remote-frame :is(button,a,input,textarea,select,label,summary,[role=button]){-webkit-app-region:no-drag;app-region:no-drag}
+/* 资源入口位于浮动标题下方；聊天滚动区无需再为同一个标题重复留白。 */
+.deck-remote-controls>.dsb-main>.deck-resource-entry{margin-top:calc(var(--dsb-band) + 12px + env(safe-area-inset-top,0px))}
+.deck-remote-controls>.dsb-main>.deck-resource-entry+.dsb-chat .dsb-scroll{padding-top:8px}
 .deck-cache-banner{display:flex;flex-wrap:wrap;gap:6px 12px;flex:none;z-index:12;padding:7px 150px 7px 12px;background:var(--bt-sidebar);border-bottom:1px solid var(--bt-line);color:var(--bt-ink-2);font-size:12px;line-height:18px}
 .deck-cache-banner span{color:var(--bt-ink-3)}
 .deck-remote-empty{margin:auto;padding:36px;color:var(--bt-ink-3);text-align:center}

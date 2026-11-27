@@ -92,7 +92,7 @@ export function goalFailure(value: unknown): string {
   }
 }
 export interface GoalOperation { readonly target: GoalTarget; readonly kind: 'write' | 'read'; phase: 'busy' | 'unknown'; message: string | null }
-// 同一服务器视图的状态条和设置共用锁；关闭面板仍记住未确认请求。
+// 同一服务器视图按 Bot 保留操作锁；关闭设置后仍记住未确认请求。
 export class GoalOperations {
   private readonly items = new Map<string, GoalOperation>()
   private readonly listeners = new Set<() => void>()

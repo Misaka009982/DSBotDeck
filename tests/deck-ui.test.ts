@@ -86,7 +86,10 @@ test('Deck 设置独立于服务器，整栏折叠仍有展开入口和视口重
   assert.ok(shell.includes("button('服务器设置'"))
 })
 test('Bot头像恢复原详情与任务入口，参数入口保留，本机背景不加载远程素材', async () => {
-  const remote = await source('remote/app.js'); const shell = await source('renderer/app.js')
+  const remote = await source('remote/app.js'); const shell = await source('renderer/app.js'); const css = await source('remote/remote.css')
+  assert.ok(css.includes('.deck-remote-frame :is(button,a,input,textarea,select,label,summary,[role=button]){-webkit-app-region:no-drag;app-region:no-drag}'))
+  assert.ok(css.includes('.deck-remote-controls>.dsb-main>.deck-resource-entry{margin-top:calc(var(--dsb-band) + 12px + env(safe-area-inset-top,0px))}'))
+  assert.ok(css.includes('.deck-remote-controls>.dsb-main>.deck-resource-entry+.dsb-chat .dsb-scroll{padding-top:8px}'))
   assert.equal(remote.includes('actions: headerActions'), false)
   assert.equal(remote.includes('toggleDetails: id =>'), false)
   assert.ok(remote.includes('h(HeaderPill, { ...views, sessionId: visibleShown'))
@@ -123,11 +126,12 @@ test('工具折叠标题只留总数，逐次展开才读正文，字段关闭�
   assert.equal(detail.includes('dangerouslySetInnerHTML'), false); assert.equal(detail.includes("call('send'"), false)
   assert.equal(detail.includes('slice(-131072)'), false)
 })
-test('私聊目标复用Bot设置入口，终止确认和未确认操作不随关闭而自动重发', async () => {
+test('私聊目标通过goal命令复用Bot设置，不置顶目标条，终止确认及未知结果保护保留', async () => {
   const remote = await source('remote/app.js'); const goal = await source('remote/private-goal.js'); const menu = await source('remote/composer-menu.js')
-  assert.ok(remote.includes('h(PrivateGoalBar, { sessionId: visibleShown })'))
-  assert.ok(goal.includes('privateGoalChatTarget(context.roster, sessionId)'))
-  assert.ok(goal.includes("context.actions.openSettings('bots', target.botId)"))
+  const css = await source('remote/private-goal.css')
+  assert.equal(remote.includes('PrivateGoalBar'), false); assert.equal(goal.includes('PrivateGoalBar'), false)
+  assert.equal(css.includes('.deck-goal-bar'), false)
+  assert.ok(goal.includes('export function PrivateGoalSettings({ botId, Card })'))
   assert.ok(menu.includes('privateGoalChatTarget(latest.current, sessionId)'))
   assert.ok(menu.includes("actions.openSettings('bots', current.botId)"))
   assert.ok(menu.includes("rows.filter(row => row.key !== 'goal')"))

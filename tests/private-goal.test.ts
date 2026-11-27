@@ -70,7 +70,7 @@ test('完整状态核对不得早于写入回执，也不以其他目标替代�
   for (const value of [null, goal(), { ...receipt, id: 'other-goal' }]) assert.throws(() => observedGoal(value, receipt))
   assert.equal(observedGoal(null), null)
 })
-test('状态条与设置共享同Bot写锁，未知结果保留到显式核对，旧回包不能解锁新操作', () => {
+test('重复打开设置共享同Bot写锁，未知结果保留到显式核对，旧回包不能解锁新操作', () => {
   const operations = new GoalOperations()
   const pending = operations.begin(target, 'write')
   assert.throws(() => operations.begin(target, 'write'))

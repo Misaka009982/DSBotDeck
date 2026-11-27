@@ -56,9 +56,9 @@ Deck 只放行本页逐项核对的固定端点；资源写入有单独有限清
 
 服务端 `addons/private-goal.md` 与 `addons/tool-display.md` 已按实际实现核对，提交前复核到 `53967c00`；本轮只修改 Deck，不修改相邻源码。构建仍固定原版 `d104d9ca`，不直接导入服务端增补 UI。当前服务包是否包含新功能必须由部署后的能力响应确认。
 
-- `extras.privateGoal.schema:1` 与顶层 `extras.schema:1` 同时成立时，当前 Bot 私聊显示目标状态条；Bot 设置增加独立目标卡片。读取 `bot.extras.goal` 的 `schema/id/revision/status/objective/acceptance/progress/evidence/reason/rounds/emptyTurns/updatedAt`，忽略服务端内部执行标识，损坏 DTO 不显示成已完成。
+- `extras.privateGoal.schema:1` 与顶层 `extras.schema:1` 同时成立时，当前 Bot 私聊通过 `/goal` 按需打开原 Bot 设置里的目标卡片，聊天顶部不放目标状态条。读取 `bot.extras.goal` 的 `schema/id/revision/status/objective/acceptance/progress/evidence/reason/rounds/emptyTurns/updatedAt`，忽略服务端内部执行标识，损坏 DTO 不显示成已完成。
 - `extra-goal-control` 仅支持 `start/revise/pause/resume/stop`，请求固定到 Bot、当前私聊、原目标与 revision。Bot 独立指定或继承基础的有效 `steer` 才允许启动／恢复；`queue` 与 DSH 默认不允许，切离保留目标并暂停，切回须手动恢复。服务器仍按有效消息方式及原配对身份最终校验；完整消息和文件／终端授权不代替目标操作权限。暂停／终止只停止后续自动推进，当前工作使用原停止按钮；目标开启不直接点亮绿色工作灯。
-- 目标状态条、Bot 设置与私聊裸 `/goal` 指向同一管理入口，群 `/goal` 不变。历史段、群和后台任务不借 Bot 别名冒充当前私聊。两个入口共享每 Bot 操作锁，断线／换段／关闭后不自动重发；显式查询完整 `state` 后核对再操作。新完整读取被较新回包淘汰、收到 `unchanged:true` 或版本落后时拒绝确认；写回执和重读目标也按编号／revision关联。
+- Bot 设置与私聊裸 `/goal` 指向同一管理入口，群 `/goal` 不变。历史段、群和后台任务不借 Bot 别名冒充当前私聊。重复打开管理入口仍共享每 Bot 操作锁，断线／换段／关闭后不自动重发；显式查询完整 `state` 后核对再操作。新完整读取被较新回包淘汰、收到 `unchanged:true` 或版本落后时拒绝确认；写回执和重读目标也按编号／revision关联。
 - 工具模型增加可选 `filePath`；标题采用“读取／编辑／运行命令 · 真实路径或说明”。仅已知 Bot `workDir` 可缩短目录内路径，外部路径或遍历形式原样显示，不作为文件访问授权。单项打开直接呈现参数或命令和输出，两者仍按原 offset/digest、并发和128Ki字符预算读取；读取常规参数紧凑显示、命令原样复制，其他参数不丢弃。授权拒绝或坏 DTO 卸载整组详情，历史修改入口保留。
 - 固定原版 BotSettingsForm 在内存中注入 Deck 目标 Card，团队动作增加显式全量刷新；工具沿用 Deck 既有分组。没有把服务端和 Deck 的两套 `ToolSteps`／`MessageNote` 混挂，也没有修改构建仓库、SHA或依赖。
 

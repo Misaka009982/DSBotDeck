@@ -2,7 +2,7 @@
 // 同一目标入口共享操作状态；只有用户明确操作才提交，迟到回包不改变新页面。
 import { createElement as h, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { call } from '@dsbot/client/api.js'
-import { GoalOperations, GOAL_LABELS, goalFailure, goalLive, goalReply, goalRequest, goalStamp, observedGoal, privateGoal, privateGoalCanRun, privateGoalChatTarget, privateGoalMode, privateGoalTarget } from '../shared/private-goal.ts'
+import { GoalOperations, GOAL_LABELS, goalFailure, goalLive, goalReply, goalRequest, goalStamp, observedGoal, privateGoal, privateGoalCanRun, privateGoalMode, privateGoalTarget } from '../shared/private-goal.ts'
 import { ResourceContext } from './resource-read.js'
 import { useDetailAvailability } from './tool-detail.js'
 import './private-goal.css'
@@ -70,7 +70,7 @@ function usePrivateGoal(botId) {
       return false
     } finally { if (request.current === pending) request.current = null }
   }
-  return { node, target, goal, mode, readable, writable, canRun, invalid: Boolean(invalid), message: invalid ?? message, operation: operations.get(botId), act, refresh: () => send('read') }
+  return { node, target, goal, mode, readable, writable, canRun, message: invalid ?? message, operation: operations.get(botId), act, refresh: () => send('read') }
 }
 function GoalFeedback({ view }) {
   return h('div', { className: 'deck-goal-feedback' },
@@ -78,21 +78,6 @@ function GoalFeedback({ view }) {
     view.operation?.message ? h('p', { role: 'alert' }, view.operation.message) : null,
     view.message ? h('p', { role: 'status' }, view.message) : null,
     view.operation?.phase === 'unknown' ? h('button', { type: 'button', className: 'bt-soft', disabled: !view.readable, onClick: () => { void view.refresh() } }, '查询服务器状态') : null)
-}
-export function PrivateGoalBar({ sessionId }) {
-  const context = useContext(ResourceContext)
-  const target = privateGoalChatTarget(context.roster, sessionId)
-  const view = usePrivateGoal(target?.botId)
-  if (!target) return null
-  const goal = view.goal
-  return h('section', { ref: view.node, className: 'deck-goal-bar', 'aria-label': '当前私聊目标' },
-    h('div', { className: 'deck-goal-bar-row' },
-      h('span', { className: 'deck-goal-status' }, context.cached ? '目标状态待同步' : view.invalid ? '目标状态待核对' : goal ? GOAL_LABELS[goal.status] : '未设置私聊目标'),
-      goal ? h('span', { className: 'deck-goal-title', title: goal.objective }, goal.objective) : null,
-      h('button', { type: 'button', className: 'bt-soft', disabled: !view.readable, onClick: () => context.actions.openSettings('bots', target.botId) }, goal ? '查看／调整目标' : '设置目标'),
-      goal?.status === 'active' ? h('button', { type: 'button', className: 'bt-soft', disabled: !view.writable || Boolean(view.operation), onClick: () => { void view.act('pause') } }, '暂停自动推进') : null),
-    goal?.reason ? h('p', { className: 'deck-goal-reason' }, goal.reason) : null,
-    h(GoalFeedback, { view }))
 }
 export function PrivateGoalSettings({ botId, Card }) {
   const view = usePrivateGoal(botId)
