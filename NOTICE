@@ -43,8 +43,11 @@ DSH Remote、React、React DOM、qrcode-generator、react-markdown、remark-gfm�
 运行依赖保留自己的许可证文件。
 
 v0.4.0 原 Markdown 呈现使用 highlight.js 11.12.0（BSD-3-Clause）、
-KaTeX 0.19.1（MIT）、remark-math 6.0.0（MIT）。构建从实际依赖复制
-完整许可证到 dist/licenses/ 下对应目录，不在本机安装或运行数学表达式中的代码。
+KaTeX 0.19.1（MIT）、remark-math 6.0.0（MIT）。highlight.js 与 KaTeX 的
+完整许可证从实际依赖复制到 dist/licenses/。remark-math 6.0.0 的 npm 包未附
+完整许可，licenses/remark-math/LICENSE 保留发布源码提交的原文并随构建复制：
+https://github.com/remarkjs/remark-math/blob/d5d0660b150810a535bbb07eac6cc96a4510aa24/license
+不在本机安装或运行数学表达式中的代码。
 
 服务器用户终端渲染使用 xterm.js（https://github.com/xtermjs/xterm.js）：
 @xterm/xterm 5.5.0 和 @xterm/addon-fit 0.10.0，许可证 MIT。

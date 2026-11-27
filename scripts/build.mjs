@@ -106,10 +106,13 @@ for (const name of ['xterm', 'addon-fit']) {
   await mkdir(path.join(dist, `licenses/xterm-${name}`), { recursive: true })
   await copyFile(path.join(clientRoot, `node_modules/@xterm/${name}/LICENSE`), path.join(dist, `licenses/xterm-${name}/LICENSE`))
 }
-for (const [name, file] of [['highlight.js', 'LICENSE'], ['katex', 'LICENSE'], ['remark-math', 'license']]) {
+for (const [name, file] of [['highlight.js', 'LICENSE'], ['katex', 'LICENSE']]) {
   await mkdir(path.join(dist, `licenses/${name}`), { recursive: true })
   await copyFile(path.join(clientRoot, `node_modules/${name}/${file}`), path.join(dist, `licenses/${name}/LICENSE`))
 }
+// remark-math 6.0.0 的 npm 包未附完整许可，使用其发布源码提交中的原文。
+await mkdir(path.join(dist, 'licenses/remark-math'), { recursive: true })
+await copyFile(path.join(clientRoot, 'licenses/remark-math/LICENSE'), path.join(dist, 'licenses/remark-math/LICENSE'))
 const assets = path.join(dist, 'assets')
 await mkdir(assets, { recursive: true })
 await createAppIcons(upstream.root, assets)
