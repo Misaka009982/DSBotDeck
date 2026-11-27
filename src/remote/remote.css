@@ -24,6 +24,14 @@ body[data-deck-background] .dsb-head::before{background:none}
 .deck-learning-cards .bt-learning-text{min-width:0;overflow-wrap:anywhere}
 /* 原输入框只增补候选层；菜单不覆盖草稿，不跨出缓存权限边界。 */
 .dsb-composer-wrap{position:relative}
+.deck-attachment-rail{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px;padding:8px;border:1px solid var(--bt-line);border-radius:12px;background:var(--bt-card);min-width:0}
+.deck-attachment-file,.deck-user-file{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;font-size:12px}
+.deck-attachment-file>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+.deck-attachment-file small,.deck-user-file small{flex:none;color:var(--bt-ink-3)}
+.deck-attachment-note{flex-basis:100%;margin:2px 0;color:var(--bt-ink-3);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.deck-attachment-actions{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.deck-user-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:5px;overflow-wrap:anywhere}
+.deck-user-file{padding:4px 6px;border:1px solid var(--bt-line);border-radius:6px}
 .deck-composer-menu{position:absolute;z-index:30;left:0;right:0;bottom:calc(100% + 8px);max-height:min(260px,40dvh);overflow:auto;overscroll-behavior:contain;border:1px solid var(--bt-line);border-radius:12px;padding:5px;background:var(--bt-main);box-shadow:0 10px 30px #0003}
 .deck-composer-menu>button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:8px;padding:9px;background:none;color:var(--bt-ink);text-align:left}
 .deck-composer-menu>button[aria-selected=true]{background:var(--bt-hover)}

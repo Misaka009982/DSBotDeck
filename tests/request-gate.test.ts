@@ -17,7 +17,7 @@ class BoundFixture implements RequestConnection {
   async call(endpoint: string, payload: unknown) { this.sent.push({ endpoint, payload }); return 'fixture-result' }
 }
 test('已确认增补只读端点保留浏览器边界和活动目标，不放行未知前缀', async () => {
-  const endpoints = ['extra-status', 'extra-messages', 'extra-task-read', 'extra-tool-list', 'extra-tool-detail', 'extra-todos',
+  const endpoints = ['extra-status', 'extra-attachment-status', 'extra-messages', 'extra-task-read', 'extra-tool-list', 'extra-tool-detail', 'extra-todos',
     'extra-delegation-list', 'extra-delegation-read', 'extra-tool-change', 'extra-workspace-open', 'extra-workspace-list', 'extra-workspace-read',
     'extra-workspace-save-status', 'extra-workspace-change', 'extra-terminal-list', 'extra-terminal-read']
   for (const mode of ['phone', 'browser'] as const) {
@@ -41,7 +41,7 @@ test('已确认增补只读端点保留浏览器边界和活动目标，不放�
   }
 })
 test('增补写入只走固定端点与原上下文，发送后切换或取消表示未知结果且不重发', async () => {
-  for (const endpoint of ['extra-terminal-create', 'extra-terminal-input', 'extra-terminal-resize', 'extra-terminal-close', 'extra-workspace-save', 'extra-goal-control']) {
+  for (const endpoint of ['extra-attachment-open', 'extra-attachment-chunk', 'extra-attachment-send', 'extra-attachment-discard', 'extra-terminal-create', 'extra-terminal-input', 'extra-terminal-resize', 'extra-terminal-close', 'extra-workspace-save', 'extra-goal-control']) {
     for (const mode of ['phone', 'browser'] as const) {
       const connection = new BoundFixture(); connection.mode = mode
       const gate = new RequestGate({ verify: async () => { throw new Error('资源写入沿用服务器设备授权') } })

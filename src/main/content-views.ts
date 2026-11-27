@@ -82,7 +82,7 @@ export class ContentViews {
     view.webContents.on('render-process-gone', () => {
       const lostDrafts = entry.drafts
       entry.failed = true; entry.ready = false; entry.drafts = false; entry.receipts.clear(); view.setVisible(false)
-      if (this.current === id) this.report(lostDrafts ? '此服务器界面进程已停止，内存中的文件编辑已丢失；待确认的远程保存仍可能完成。可重新打开界面后核对服务器文件。' : '此服务器的界面进程已停止，目录和连接仍保留；请点击“重新打开界面”恢复。')
+      if (this.current === id) this.report(lostDrafts ? '此服务器界面进程已停止，内存中的编辑、附件和待确认记录已丢失；已提交的保存或消息仍可能完成。可重新打开界面后核对服务器记录。' : '此服务器的界面进程已停止，目录和连接仍保留；请点击“重新打开界面”恢复。')
     })
     view.webContents.on('did-fail-load', (_event, _code, _description, _url, mainFrame) => {
       if (!mainFrame) return
@@ -193,7 +193,7 @@ export class ContentViews {
     if (owned && typeof value === 'boolean') owned[1].drafts = value
   }
   reopen(id: string): void {
-    if (this.hasDrafts(id)) { this.report('此服务器有未保存或待确认的文件编辑，请先在文件编辑栏处理或明确丢弃。'); return }
+    if (this.hasDrafts(id)) { this.report('此服务器有未保存的编辑、聊天附件或待确认记录，请先在对应栏处理或明确丢弃。'); return }
     this.remove(id); if (this.current === id) this.sync()
   }
   remove(id: string): void {

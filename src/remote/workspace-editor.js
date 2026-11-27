@@ -7,8 +7,9 @@ import { WorkspaceDraftStore, draftKey, editFile, savedChange } from '../shared/
 import { errorCode } from '../shared/validation.ts'
 import { currentResourceSession, resourceAccessFailure, resourceFailure } from '../shared/resource-model.ts'
 import { onResourceDenied, rejectResourceReads, ReadState, useResourceContext, useResourceRead } from './resource-read.js'
+import { draftPresence } from './draft-presence.js'
 export const workspaceDrafts = new WorkspaceDraftStore()
-workspaceDrafts.subscribe(() => window.dsbotContent?.drafts?.(workspaceDrafts.list().length > 0))
+workspaceDrafts.subscribe(() => draftPresence('workspace', workspaceDrafts.list().length > 0))
 const useDrafts = () => useSyncExternalStore(workspaceDrafts.subscribe, () => workspaceDrafts.revision)
 const visible = node => document.visibilityState === 'visible' && !document.body.hasAttribute('data-deck-cached') && node?.isConnected && !node.closest('[data-leaving]')
 const STATUS = { editing: '尚未保存', saving: '正在提交', pending: '服务器处理中', saved: '服务器已确认保存', conflict: '版本冲突，编辑内容已保留', failed: '服务器确认保存失败', unknown: '保存结果未知，没有自动重发' }

@@ -117,6 +117,26 @@ test('聊天菜单只读接入原输入框，提及和动作不借DSH服务或�
   assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
   assert.equal(adaptUiSource('@dsbotdeck/composer-menu', undefined, client, source), path.join(client, 'src/remote/composer-menu.js'))
 })
+test('附件入口挂在原加号所在卡内，纯附件可发送，原输入法和文字发送路径保留', async () => {
+  const chatName = 'app/ui/src/chat.js'; const cellsName = 'ds-bot/src/client/cells.js'
+  for (const name of [chatName, cellsName]) {
+    const raw = await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8')
+    const next = paintSource(raw, path.join(source, name), source) ?? ''
+    const parsed = ts.transpileModule(next, { fileName: name, reportDiagnostics: true, compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext, allowJs: true } })
+    assert.deepEqual(parsed.diagnostics ?? [], [])
+    assert.equal(paintSource(raw.replace(/\r?\n/g, '\r\n'), path.join(source, name), source), next)
+    assert.equal(await readFile(new URL(`../../DS-Bot/${name}`, import.meta.url), 'utf8'), raw)
+    if (name === chatName) {
+      assert.ok(next.includes('attachments.input')); assert.ok(next.includes('attachments.content'))
+      assert.ok(next.includes("value === '' && !attachments.hasFiles")); assert.ok(next.includes('attachments.blocked'))
+      assert.ok(next.includes('if (attachments.hasFiles) await attachments.send(value)'))
+      assert.ok(next.includes('if (delivery) { await delivery();')); assert.ok(next.includes('else await actions.send(sessionId, text)'))
+      assert.ok(next.includes('onPaste: attachments.onPaste')); assert.ok(next.includes('onDrop: attachments.onDrop'))
+      assert.ok(next.includes('event.nativeEvent.isComposing')); assert.ok(next.includes('event.keyCode !== 229'))
+    } else assert.ok(next.includes('h(UserAttachments, { files: row.fileRefs })'))
+  }
+  assert.equal(adaptUiSource('@dsbotdeck/composer-attachments', undefined, client, source), path.join(client, 'src/remote/composer-attachments.js'))
+})
 test('入口只在内存中去掉原 App 挂载与强制系统明暗监听', () => {
   const original = `import { App } from './app.js'\n${systemTheme}\ncreateRoot(document.getElementById('root')).render(h(App))\ninstallStyles(text)`
   const next = bootstrapText(original)

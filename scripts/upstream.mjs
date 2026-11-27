@@ -45,6 +45,7 @@ export function adaptUiSource(specifier, importer, clientRoot, sourceRoot) {
   if (specifier === '@dsbotdeck/learning-model') return path.join(clientRoot, 'src/shared/learning-model.ts')
   if (specifier === '@dsbotdeck/header-actions') return path.join(clientRoot, 'src/remote/header-actions.js')
   if (specifier === '@dsbotdeck/private-goal') return path.join(clientRoot, 'src/remote/private-goal.js')
+  if (specifier === '@dsbotdeck/composer-attachments') return path.join(clientRoot, 'src/remote/composer-attachments.js')
   if (specifier === '@dsbotdeck/composer-menu') return path.join(clientRoot, 'src/remote/composer-menu.js')
   if (specifier === '@dsbotdeck/peer-event') return path.join(clientRoot, 'src/remote/peer-event.js')
   if (specifier === '@dsbotdeck/chat-model') return path.join(clientRoot, 'src/shared/chat-model.ts')

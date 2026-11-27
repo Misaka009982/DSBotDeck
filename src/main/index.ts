@@ -276,14 +276,14 @@ async function start(): Promise<void> {
     const id = typeof args.serverId === 'string' ? args.serverId : ''
     switch (data?.action) {
       case 'pair':
-        if (typeof args.repairId === 'string' && views?.hasDrafts(args.repairId)) throw new DeckError('bot/refused', '重新配对前请先处理或丢弃该服务器的未保存文件编辑。')
+        if (typeof args.repairId === 'string' && views?.hasDrafts(args.repairId)) throw new DeckError('bot/refused', '重新配对前请先处理或丢弃该服务器的未保存文件编辑或聊天附件。')
         return manager.pair(args.uri, args.alias, args.repairId)
       case 'connect': return manager.connect(id)
       case 'disconnect': return manager.disconnect(id)
       case 'rename': return manager.rename(id, args.alias)
       case 'change-relay': return manager.changeRelay(id, args.address, args.expectedRelay)
       case 'forget':
-        if (views?.hasDrafts(id)) throw new DeckError('bot/refused', '移除服务器前请先处理或丢弃其未保存文件编辑。')
+        if (views?.hasDrafts(id)) throw new DeckError('bot/refused', '移除服务器前请先处理或丢弃其未保存文件编辑或聊天附件。')
         await manager.forget(id); views?.remove(id); return null
       case 'select': return manager.select(data.args)
       case 'navigate': return manager.navigate(id, args.command)
@@ -401,8 +401,8 @@ async function start(): Promise<void> {
     if (stopped) return
     event.preventDefault()
     if (quitting) return
-    if (views?.hasDrafts() && dialog.showMessageBoxSync({ type: 'warning', title: '仍有文件编辑未处理',
-      message: '未保存的编辑只保留在内存，退出会丢失；待确认的服务器保存不会因退出而撤销。',
+    if (views?.hasDrafts() && dialog.showMessageBoxSync({ type: 'warning', title: '仍有编辑或附件未处理',
+      message: '未保存的编辑、聊天附件和待确认记录只保留在内存，退出会丢失；已提交的保存或消息不会因退出而撤销。',
       buttons: ['返回处理', '放弃本地内容并退出'], defaultId: 0, cancelId: 0, noLink: true }) !== 1) return
     quitting = true
     traceWindow({ event: 'window-close', reason: 'before-quit' })

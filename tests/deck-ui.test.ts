@@ -4,6 +4,19 @@ import { strict as assert } from 'node:assert'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 const source = (name: string) => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8')
+test('本地附件只读用户所选File，隐藏取消且草稿存活与文件编辑合并', async () => {
+  const attachments = await source('remote/composer-attachments.js'); const presence = await source('remote/draft-presence.js')
+  const editor = await source('remote/workspace-editor.js'); const app = await source('remote/app.js')
+  assert.ok(attachments.includes("type: 'file', multiple: true")); assert.ok(attachments.includes('event.clipboardData?.files'))
+  assert.ok(attachments.includes('event.dataTransfer.files')); assert.ok(attachments.includes('event.target.value ='))
+  assert.ok(attachments.includes('request.current?.abort()')); assert.ok(attachments.includes("outgoing.current?.phase !== 'sending'")); assert.ok(attachments.includes('latest.current.context.epoch === epoch'))
+  assert.ok(attachments.includes('batch.target.sessionId !== sessionId')); assert.ok(attachments.includes('查询原发送结果'))
+  assert.ok(attachments.includes('document.removeEventListener(\'visibilitychange\''))
+  assert.ok(presence.includes('[...pending.values()].some(Boolean)')); assert.ok(editor.includes("draftPresence('workspace'"))
+  assert.ok(attachments.includes("draftPresence('attachments'")); assert.ok(app.includes('h(AttachmentDraftShelf)'))
+  assert.equal(attachments.includes('readFile('), false); assert.equal(attachments.includes('localStorage'), false)
+  assert.equal(attachments.includes('file.path'), false); assert.equal(attachments.includes('dangerouslySetInnerHTML'), false)
+})
 test('设置按五类标签只显示当前类别，导航独立且后台草稿不被重挂', async () => {
   const settings = await source('renderer/deck-settings.js'); const css = await source('renderer/shell.css')
   const main = await source('main/index.ts'); const preload = await source('preload/shell.ts'); const controls = await source('renderer/window-settings.js')

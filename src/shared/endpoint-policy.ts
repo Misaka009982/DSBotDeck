@@ -6,9 +6,10 @@ import { GATED } from '@dsbot/gated'
 const LOCAL_ONLY = new Set(['folder-pick', 'computer-user-active', 'computer-permission', 'data-move'])
 // 仅登记已核对的资源和私聊目标操作；权限和对象归属由服务器逐次校验。
 export const EXTRA_READS = new Set(['extra-status', 'extra-messages', 'extra-task-read', 'extra-tool-list', 'extra-tool-detail', 'extra-todos',
+  'extra-attachment-status',
   'extra-delegation-list', 'extra-delegation-read', 'extra-tool-change', 'extra-workspace-open', 'extra-workspace-list', 'extra-workspace-read',
   'extra-workspace-save-status', 'extra-workspace-change', 'extra-terminal-list', 'extra-terminal-read'])
-export const EXTRA_WRITES = new Set(['extra-terminal-create', 'extra-terminal-input', 'extra-terminal-resize', 'extra-terminal-close', 'extra-workspace-save', 'extra-goal-control'])
+export const EXTRA_WRITES = new Set(['extra-attachment-open', 'extra-attachment-chunk', 'extra-attachment-send', 'extra-attachment-discard', 'extra-terminal-create', 'extra-terminal-input', 'extra-terminal-resize', 'extra-terminal-close', 'extra-workspace-save', 'extra-goal-control'])
 export const EXTRA_OPERATIONS = new Set([...EXTRA_READS, ...EXTRA_WRITES])
 const READ_ONLY = new Set([
   'hello', 'state', 'notices', 'avatar', 'models', 'efforts', 'providers', 'usage', 'usage-summary', 'run-stats',

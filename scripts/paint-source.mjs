@@ -113,6 +113,8 @@ export function paintSource(source, id, root) {
     return "import { preferInputStatus } from '@dsbotdeck/tool-model'\n" + source
   }
   if (name === 'ds-bot/src/client/cells.js') {
+    source = replaceOnce(source, '    control,\n    row.images ?', "    control,\n    h(UserAttachments, { files: row.fileRefs }),\n    row.images ?")
+    source = "import { UserAttachments } from '@dsbotdeck/composer-attachments'\n" + source
     source = replaceOnce(source, 'function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {', 'export function EventLine({ prefix, bots, joiner = t(\'and\'), onOpen, whole = false }) {')
     const anchor = "    case 'divider': return h(PartLine, { key, time: row.time })"
     source = replaceOnce(source, anchor, `    case 'steps': return h(ToolSteps, { key: toolGroupKey(row, sessionId, key), entry: row, scope: { sessionId, roomId: roster.roomsById[sessionId]?.id }, fullMessages: remoteReadMode(roster).fullMessages })\n    case 'internal': return h(MessageNote, { key, item: row, EventLine })\n    case 'diagnostic': return h(MessageNote, { key: row.deckDiagnosticGroupKey ?? key, item: row })\n${anchor}`)
@@ -143,10 +145,16 @@ export function paintSource(source, id, root) {
     source = replaceOnce(source, '  const { view, stream, pending, load, send, keep } = useChat(bot?.id, room?.id, sessionId, feed)', '  const extraMode = remoteReadMode(roster)\n  const { view, stream, pending, load, send, keep, failure } = useChat(bot?.id, room?.id, sessionId, feed, extraMode.fullMessages, extraMode.state)')
     source = replaceOnce(source, 'onClick: () => load(view.cursor ?? undefined, scroller.current)', 'onClick: () => load(failure?.cursor, scroller.current)')
     source = replaceOnce(source, "        earlier ? h('div', { className: 'bt-earlier-top' }, earlier) : null,", "        failure ? h('p', { className: 'deck-chat-read-error', role: 'alert' }, failure.message) : null,\n        earlier ? h('div', { className: 'bt-earlier-top' }, earlier) : null,")
-    source = replaceOnce(source, '  const inputActions = useInput(field, setText)', '  const inputActions = useInput(field, setText)\n  const menu = useComposerMenu({ sessionId, text, setText, field, disabled, actions, useRoster, onError: setError })')
-    source = replaceOnce(source, "    if (value === '' || disabled) return", "    if (value === '' || disabled || menu.isBlocked()) return")
-    source = replaceOnce(source, '      await onSend(value)', '      if (!menu.runCommand(value)) await onSend(value)')
-    source = replaceOnce(source, "  return h('div', { className: 'dsb-composer-wrap' },\n", "  return h('div', { className: 'dsb-composer-wrap' },\n    menu.content,\n")
+    source = replaceOnce(source, '  const inputActions = useInput(field, setText)', '  const inputActions = useInput(field, setText)\n  const attachments = useComposerAttachments({ sessionId, field, disabled, onSend, onError: setError, setText })\n  const menu = useComposerMenu({ sessionId, text, setText, field, disabled, actions, useRoster, onError: setError })')
+    source = replaceOnce(source, "    if (value === '' || disabled) return", "    if (value === '' && !attachments.hasFiles || disabled || attachments.blocked || menu.isBlocked()) return")
+    source = replaceOnce(source, '      await onSend(value)', '      if (attachments.hasFiles) await attachments.send(value)\n      else if (!menu.runCommand(value)) await onSend(value)')
+    source = replaceOnce(source, '  const send = async (text, actions, sessionId) => {', '  const send = async (text, actions, sessionId, delivery, fileRefs, images) => {')
+    source = replaceOnce(source, "    const entry = { kind: 'user', text, time: Date.now() }", "    const entry = { kind: 'user', text, time: Date.now(), ...(fileRefs?.length ? { fileRefs } : {}), ...(images ? { images } : {}) }")
+    source = replaceOnce(source, '      await actions.send(sessionId, text)', '      if (delivery) { await delivery(); if (gen.current === myGen) void loadRef.current(undefined, undefined, true) }\n      else await actions.send(sessionId, text)')
+    source = replaceOnce(source, '        onSend: text => send(text, actions, sessionId),', '        onSend: (text, delivery, fileRefs, images) => send(text, actions, sessionId, delivery, fileRefs, images),')
+    source = replaceOnce(source, "  return h('div', { className: 'dsb-composer-wrap' },\n", "  return h('div', { className: 'dsb-composer-wrap', onPaste: attachments.onPaste, onDragOver: attachments.onDragOver, onDrop: attachments.onDrop },\n    menu.content,\n    attachments.content,\n")
+    source = replaceOnce(source, "      h('div', { className: 'dsb-composer-tools' }, h(ComposerPlus,", "      attachments.input,\n      h('div', { className: 'dsb-composer-tools' }, h(ComposerPlus,")
+    source = replaceOnce(source, "disabled: disabled || text.trim() === ''", "disabled: disabled || attachments.blocked || text.trim() === '' && !attachments.hasFiles")
     source = replaceOnce(source, "          'data-composer-input': '',\n          onChange: event => setText(event.target.value),", "          'data-composer-input': '',\n          ...menu.inputProps,\n          onChange: event => { setText(event.target.value); menu.onSelect() },")
     source = replaceOnce(source, '          onKeyDown: (event) => {\n', '          onKeyDown: (event) => {\n            if (menu.onKeyDown(event)) return\n')
     source = replaceOnce(source,
@@ -164,7 +172,7 @@ export function paintSource(source, id, root) {
     const anchor = '  const onScroll = () => {\n'
     source = replaceOnce(source, anchor, `  // 本地远程壳只在成功布局最新一页后确认对应结果。\n  useLayoutEffect(() => {\n    if (!view.loading && !view.failed && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)\n  }, [view.items, view.loading, view.failed, view.sessionId])\n\n${anchor}`)
     source = replaceOnce(source, '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n', '    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < FOLLOW_PX\n    if (follow.current && !view.loading && !view.failed) team.deckPaint?.(bot?.id, room?.id, node)\n')
-    return "import { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { LearningCards } from '@dsbotdeck/learning-cards'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
+    return "import { useComposerAttachments } from '@dsbotdeck/composer-attachments'\nimport { readExtraPage, extraReadFailure } from '@dsbotdeck/extra-read'\nimport { remoteReadMode } from '@dsbotdeck/remote-capabilities'\nimport { errorCode } from '@dsbotdeck/validation'\nimport { useComposerMenu } from '@dsbotdeck/composer-menu'\nimport { foregroundApprovals } from '@dsbotdeck/approval-model'\nimport { ApprovalCard } from '@dsbot/client/member-status.js'\nimport { LearningCards } from '@dsbotdeck/learning-cards'\nimport { watchToolSteps } from '@dsbotdeck/tool-refresh'\n" + source
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")

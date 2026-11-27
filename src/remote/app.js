@@ -9,6 +9,7 @@ import { sessionResourceTarget } from '../shared/resource-model.ts'
 import { ResourceContext } from './resource-read.js'
 import { ResourceEntries } from './resource-entry.js'
 import { WorkspaceDraftShelf } from './workspace-editor.js'
+import { AttachmentDraftShelf } from './composer-attachments.js'
 import { PrivateGoalBar } from './private-goal.js'
 import { HeaderPill } from '@dsbot/client/header.js'
 import { Overlays } from '@dsbot/client/overlays.js'
@@ -128,6 +129,7 @@ export function App() {
           h(Chat, { key: visibleShown, sessionId: visibleShown, team }))
           : h('div', { className: 'deck-remote-empty' }, roster.ready ? '此服务器暂无可显示的 Bot，可从服务器菜单新建。' : '正在读取远程团队…'))),
     h(WorkspaceDraftShelf),
+    h(AttachmentDraftShelf),
     h(Contain, { onError: closeOverlays }, h(Overlays, views)),
     h(ErrorToast, views)))
 }
