@@ -11,7 +11,7 @@ import { uiResolver } from '../scripts/ui-resolver.mjs'
 
 const client = fileURLToPath(new URL('../', import.meta.url))
 const upstream = path.resolve(client, '../DS-Bot')
-test('Windows构建中Deck与服务器设置、Bot设置、后台按钮共用同一语言实例', async () => {
+test('Windows构建中Deck与服务器设置、Bot设置、后台按钮共用同一语言实例', async t => {
   const entry = normalizePath(path.join(client, 'src/renderer/locale-bundle-probe.js'))
   const modules = new Map<string, string>()
   const names = ['settings', 'bot-settings', 'activity-row']
@@ -46,11 +46,15 @@ export function labels(tag) {
     }],
     build: { write: false, minify: false, lib: { entry, name: 'DeckLocaleProbe', formats: ['iife'] } },
   })
-  assert.ok(!Array.isArray(result) && 'output' in result)
-  const entryChunk = result.output.find(item => item.type === 'chunk' && item.isEntry)
+  const outputs = Array.isArray(result) ? result : [result]
+  assert.equal(outputs.length, 1)
+  const output = outputs[0]
+  assert.ok(output && 'output' in output)
+  const entryChunk = output.output.find(item => item.type === 'chunk' && item.isEntry)
   assert.ok(entryChunk?.type === 'chunk')
   const device = { language: 'en-US' }
   const bundle = runInNewContext(`${entryChunk.code}\n;DeckLocaleProbe`, { navigator: device })
+  t.diagnostic(JSON.stringify({ ids, chinese: bundle.labels('zh') }))
   assert.equal(bundle.shared, true, `词典被解析为不同模块：${JSON.stringify(ids)}`)
   assert.equal(ids.length, 1, '一个页面只能安装一份上游词典模块')
   for (const [tag, expected, connection, profile, background] of [
