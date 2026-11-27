@@ -15,7 +15,7 @@ class FixtureMedia {
 }
 test('Deck 原样复用上游每套主题的浅色和深色，不另存配色副本', () => {
   const themes = allThemes()
-  assert.deepEqual(Object.keys(themes).sort(), ['deepseek', 'mono', 'moonlight', 'paper'])
+  assert.deepEqual(Object.keys(themes).sort(), ['deepseek', 'fei', 'mono', 'moonlight', 'paper'])
   for (const [name, theme] of Object.entries(themes)) {
     assert.deepEqual(themeDefinition(name), theme)
     const css = themeCss(themeDefinition(name), undefined)

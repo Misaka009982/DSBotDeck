@@ -28,7 +28,7 @@ function fixture() {
   const visibility = new Set<() => void>()
   const call = (endpoint: string, payload: Record<string, unknown>, signal?: AbortSignal) => new Promise<unknown>((resolve, reject) => requests.push({ endpoint, payload, signal, resolve, reject }))
   const feed = { on(listener: (event: string, data: unknown) => void) { listeners.add(listener); return () => { listeners.delete(listener) } } }
-  const useRemoteChat = runInNewContext(`${hookText.replace(/^import .*\n/gm, '').replace('export function', 'function')}\nuseRemoteChat`, {
+  const useRemoteChat = runInNewContext(`${hookText.replace(/^import .*\r?\n/gm, '').replace('export function', 'function')}\nuseRemoteChat`, {
     ...helpers, readExtraPage, extraReadFailure, errorCode, call, AbortController,
     useRef: (initial: unknown) => cell(() => ({ value: { current: initial } })).value,
     useState: (initial: unknown) => { const value = cell(() => ({ value: initial })); return [value.value, (next: any) => { value.value = typeof next === 'function' ? next(value.value) : next }] },
