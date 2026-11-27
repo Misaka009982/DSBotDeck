@@ -22,6 +22,8 @@
       "@dsbot/remote-policy": ["../DS-Bot/ds-bot/src/shared/remote-endpoints.js"],
       "@noble/curves/ed25519": ["./node_modules/@noble/curves/ed25519.d.ts"],
       "@noble/hashes/sha256": ["./node_modules/@noble/hashes/sha256.d.ts"],
+      "@noble/hashes/hkdf": ["./node_modules/@noble/hashes/hkdf.d.ts"],
+      "@noble/ciphers/chacha": ["./node_modules/@noble/ciphers/chacha.d.ts"],
       "@noble/ciphers/webcrypto": ["./node_modules/@noble/ciphers/webcrypto.d.ts"],
       "@lukeburns/clatterjs": ["./node_modules/@lukeburns/clatterjs/dist/index.d.ts"]
     }

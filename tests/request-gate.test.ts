@@ -16,7 +16,7 @@ class BoundFixture implements RequestConnection {
   view() { return { alias: '测试目标', mode: this.mode } }
   token() { return { generation: this.epoch, peer: this.peer } }
   valid(token: ConnectionToken) { return token.generation === this.epoch && token.peer === this.peer }
-  async call(endpoint: string, payload: unknown) { this.sent.push({ endpoint, payload }); return 'fixture-result' }
+  async call(endpoint: string, payload: unknown): Promise<unknown> { this.sent.push({ endpoint, payload }); return 'fixture-result' }
 }
 test('已确认增补只读端点保留浏览器边界和活动目标，不放行未知前缀', async () => {
   const endpoints = ['extra-status', 'extra-attachment-status', 'extra-messages', 'extra-task-read', 'extra-tool-list', 'extra-tool-detail', 'extra-todos',
