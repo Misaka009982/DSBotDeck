@@ -2,7 +2,8 @@
 // 复用原 team 的标签状态与 BotPanel，只给 workspace.render 接远程资源。
 import { createElement as h, useLayoutEffect, useRef, useState } from 'react'
 import { buildWorkspaceTabs } from '@dsbot/ui/right-panel.js'
-import { currentResourceSession, moduleAccess, resourcePermissions, sessionResourceTarget } from '../shared/resource-model.ts'
+import { currentResourceSession, moduleAccess, sessionResourceTarget } from '../shared/resource-model.ts'
+import { workspaceSnapshotIdentity } from '../shared/workspace-display.ts'
 import { workspacePath } from '../shared/workspace-model.ts'
 import { WorkspacePane } from './workspace-pane.js'
 import { TerminalPane } from './terminal-pane.js'
@@ -45,7 +46,7 @@ export function useRemoteWorkspace({ team, roster, shown, cached, epoch }) {
   const target = opened?.selection === shown ? opened.target : sessionResourceTarget(roster, shown)
   const panel = ui.rightPanel
   const tabs = buildWorkspaceTabs(panel).filter(tab => ['files', 'preview', 'terminal'].includes(tab.id))
-  const boundary = JSON.stringify([target, epoch, cached, roster?.readOnly, resourcePermissions(roster?.extras)])
+  const boundary = target ? workspaceSnapshotIdentity(roster, target, shown) : null
   const workspace = {
     tabs, active: panel?.tab ?? null,
     onSelect: id => actions.setRightPanelTab(id), onCloseTab: id => actions.closeWorkspaceTab(id),
@@ -54,7 +55,7 @@ export function useRemoteWorkspace({ team, roster, shown, cached, epoch }) {
         initialPath: panel?.fileSessionId && panel.fileSessionId !== target.sessionId ? null : panel?.file,
         line: panel?.fileLine,
         onOpenFile: path => original.current.openFile({ path, sessionId: target.sessionId }) }) : null,
-      visible && tab === 'terminal' ? h(TerminalPane, { target }) : null) : null,
+      visible && tab === 'terminal' ? h(TerminalPane, { key: JSON.stringify([epoch, cached]), target }) : null) : null,
   }
   return { workspace, openWorkspace: open }
 }

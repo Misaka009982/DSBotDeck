@@ -14,7 +14,7 @@
 | 工具单项与参数/输出 | **本轮复用** `ToolCardShell`、`CodeSection` | 外层总数分组、callSeq身份、真实标题、未知状态及128Ki字符预算保留；按用户要求展开单项即显示参数/输出；复制经实时读取门禁 |
 | 历史工具修改与保存差异 | **本轮复用** `computeLineDiff`和`DiffFileView` | 只比较服务器成功结果中的前后文本；缺旧文本不当新增文件；片段行号明确为相对行号，原样复制入口仍保留 |
 | 子Agent委派 | **本轮复用** `SubagentLineageBar`、`SubagentReadOnlyBar` | 使用原返回与父子导航；目录、状态来源和事件仍取增补只读DTO；原SessionTranscript依赖本机日志且数据不等价 |
-| 文件树、预览、终端侧栏 | 第25轮已复用`BotPanel`、`PanelStrip`、`TreeBranch`、`FilePreview`及`readXtermTheme` | 服务器根句柄、目录分页、终端字节/控制序号和未知回执保留；本机workspace/terminal接口不开放 |
+| 文件树、预览、终端侧栏 | 第25轮已复用`BotPanel`、`PanelStrip`、`TreeBranch`、`FilePreview`及`readXtermTheme` | 服务器根句柄、目录自动续页、逐目录自然正/倒序、终端字节/控制序号和未知回执保留；文件已读快照在暂停时继续阅读，显式刷新，不扩展到终端或工具正文；本机workspace/terminal接口不开放 |
 | 文件编辑保存 | 原版仅有文件预览，缺少等价远程编辑回执界面 | 保留WorkspaceEditor、版本比较、冲突和内存草稿；本轮保存结果改用原差异组件 |
 | 工具审批、学习提案 | 已复用`ApprovalCard`、`ProposalCard` | 仅允许一次/拒绝；学习审批逐设备授权和历史时间位置保留，不借原本机审批快捷键扩大权限 |
 | 连续失败与重试、协作提示 | 协作已复用原`EventLine` | 用户要求连续失败默认计数折叠；原FailureCell依赖本机轮次节点且没有等价分组，保留真实诊断记录，不猜失败代码 |

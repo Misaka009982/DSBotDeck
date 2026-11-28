@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { workspacePreview, workspaceTreeEntries } from '../src/shared/workspace-display.ts'
+import { workspacePreview, workspaceSnapshotIdentity, workspaceTreeEntries } from '../src/shared/workspace-display.ts'
 import { appendWorkspaceDirectory, workspaceDirectory, workspaceFile, workspacePath, workspaceRoot } from '../src/shared/workspace-model.ts'
 const target = { scope: { kind: 'bot' as const, botId: 'bot-a' }, sessionId: 'part-a' }
 const root = { rootId: 'root-a', sessionId: 'part-a', expiresAt: 1000, maxFileBytes: 256 * 1024, pageSize: 64, writable: true }
@@ -47,6 +47,38 @@ test('远程目录适配原文件树保留完整相对路径、文件种类和�
     { name: '文件.ts', kind: 'file', path: 'src/文件.ts', size: 32 },
   ])
   assert.equal(page.entries[0].type, 'directory')
+})
+test('自动续页达到4096项后明确停止，不借服务器游标无限扩展目录', () => {
+  let directory = workspaceDirectory({ schema: 1, rootId: root.rootId, path: '', filtered: false, entries: [], cursor: null }, root, '')
+  for (let offset = 0; offset < 4096; offset += 64) {
+    const cursor = { digest: 'stable-directory', offset }
+    const page = workspaceDirectory({ schema: 1, rootId: root.rootId, path: '', filtered: false,
+      entries: Array.from({ length: 64 }, (_, index) => ({ name: `${offset + index}.txt`, type: 'file' })),
+      cursor: { digest: cursor.digest, offset: offset + 64 } }, root, '', cursor)
+    directory = appendWorkspaceDirectory(directory, page)
+  }
+  assert.equal(directory.entries.length, 4096); assert.equal(directory.limited, true)
+})
+test('每目录按文件名自然正序或倒序，目录优先且不修改原分页顺序', () => {
+  const page = workspaceDirectory({ schema: 1, rootId: root.rootId, path: '', filtered: false, cursor: null,
+    entries: [{ name: '10.txt', type: 'file' }, { name: '2.txt', type: 'file' }, { name: '资料', type: 'directory' }] }, root, '')
+  const before = JSON.stringify(page)
+  assert.deepEqual(workspaceTreeEntries(page).map(entry => entry.name), ['资料', '2.txt', '10.txt'])
+  assert.deepEqual(workspaceTreeEntries(page, true).map(entry => entry.name), ['资料', '10.txt', '2.txt'])
+  assert.equal(JSON.stringify(page), before)
+})
+test('工作区快照只随目标、已知目录和授权变化，不随连接或可见性变化', () => {
+  const roster = { byId: { 'bot-a': { id: 'bot-a', sessionId: 'part-a', workDir: '/tmp/project' } },
+    extras: { schema: 1, workspace: { schema: 1, read: true, write: true } } }
+  const before = workspaceSnapshotIdentity(roster, target, 'part-a')
+  assert.equal(workspaceSnapshotIdentity({ ...roster, cached: true, epoch: 2, visible: false }, target, 'part-a'), before)
+  for (const patch of [
+    { ...roster, byId: { 'bot-a': { ...roster.byId['bot-a'], workDir: '/tmp/other' } } },
+    { ...roster, extras: { ...roster.extras, workspace: { ...roster.extras.workspace, read: false } } },
+    { ...roster, extras: { ...roster.extras, workspace: { ...roster.extras.workspace, write: false } } },
+  ]) assert.notEqual(workspaceSnapshotIdentity(patch, target, 'part-a'), before)
+  assert.notEqual(workspaceSnapshotIdentity(roster, { ...target, sessionId: 'part-b' }, 'part-a'), before)
+  assert.notEqual(workspaceSnapshotIdentity(roster, target, 'part-b'), before)
 })
 test('原预览仅接已验证文本，Markdown与表格可呈现，HTML和SVG保持源码', () => {
   for (const [path, kind, language] of [['README.md', 'markdown', 'markdown'], ['data.tsv', 'table', ''], ['src/a.ts', 'code', 'typescript'], ['index.html', 'code', 'xml'], ['image.svg', 'code', 'xml'], ['constructor', 'text', ''], ['x.__proto__', 'text', '']]) {

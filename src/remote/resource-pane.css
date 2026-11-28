@@ -25,14 +25,22 @@
 .deck-workspace-preview{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
 .deck-workspace[hidden]{display:none}
 .deck-tree-branch{flex:none;min-width:0}
-.deck-tree-more{color:var(--bt-ink-3)}
+.deck-tree-row{display:flex;align-items:center;min-width:0}
+.deck-tree-row>.dsb-ft-row{flex:1;min-width:0}
+.deck-directory-order{flex:none;width:26px;height:26px;margin-right:5px}
+.deck-directory-order svg{width:14px;height:14px}
+.deck-directory-count{font-size:11px}
+.deck-workspace .dsb-ws-pane[hidden]{display:none}
 .deck-workspace .deck-resource-read-state:empty{display:none}
 .deck-workspace .deck-resource-read-state:not(:empty){padding:0 12px}
 .deck-change-detail{padding:8px 0;min-width:0}
 .deck-recorded-change{min-width:0}
 .deck-recorded-change .dsb-diff-lines{max-height:420px;overflow:auto}
 .deck-change-path{overflow-wrap:anywhere}
-body[data-deck-cached] :is(.deck-delegation-history,.deck-delegation-list,.deck-workspace-preview,.deck-recorded-change){visibility:hidden}
+body[data-deck-cached] :is(.deck-delegation-history,.deck-delegation-list,.deck-recorded-change){visibility:hidden}
+/* 原预览的复制与源码切换只处理已加载文本，离线时仍可阅读和操作。 */
+body[data-deck-cached] .bt-panel .deck-workspace-preview .dsb-pv button,
+body[data-deck-cached] .bt-panel .deck-workspace :is(.deck-directory-order,.dsb-ft-search-input){pointer-events:auto;opacity:1}
 .deck-workspace-editor{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;padding:8px 12px;border-top:1px solid var(--bt-line)}
 .deck-workspace-input{display:block;box-sizing:border-box;width:100%;min-height:240px;resize:vertical;padding:10px;border:1px solid var(--bt-line);border-radius:6px;background:var(--bt-main);color:var(--bt-ink);font:13px/1.6 var(--bt-mono,monospace);tab-size:2}
 .deck-draft-shelf{flex:none;max-height:45dvh;overflow:auto;padding:8px 14px;background:var(--bt-main);border-top:1px solid var(--bt-line);font-size:12px;color:var(--bt-ink)}
