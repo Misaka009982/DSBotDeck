@@ -396,7 +396,7 @@ test('新版分页投影保留群成员与附件，刷新最新页不丢已加�
   const [member] = helpers.adaptRoomItems([{ kind: 'bot', id: 'post-1', botId: 'bot-a', name: '成员', text: '结果', time: 4, files: [file] }])
   assert.equal(member.kind, 'post'); assert.equal(member.botId, 'bot-a'); assert.equal(member.text, '结果')
   assert.deepEqual(JSON.parse(JSON.stringify(member.presented)), [file])
-  assert.ok(remoteRead.includes('if (rejected.current) return'))
+  assert.ok(remoteRead.includes('if (generation.current !== current || rejected.current) return'))
   assert.ok(remoteRead.includes('request.current?.abort()'))
 })
 test('原文件树和终端主题按固定源码提取，保留展开与选中语义且不携带本机传输', async () => {
