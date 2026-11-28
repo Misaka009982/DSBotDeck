@@ -53,8 +53,11 @@ export function App() {
   const [packet, setPacket] = useState(null)
   const localeReady = useDeckLocale(status.uiLanguage ?? 'system')
   const cachedRef = useRef(true)
-  cachedRef.current = status.cached || feedLost
-  const { workspace, openWorkspace } = useRemoteWorkspace({ team, roster, shown, cached: status.cached || feedLost, epoch: resourceEpoch })
+  const cached = status.cached || feedLost
+  const paused = cached || status.active !== true
+  const epoch = `${resourceEpoch}:${status.viewEpoch ?? 0}`
+  cachedRef.current = paused
+  const { workspace, openWorkspace } = useRemoteWorkspace({ team, roster, shown, cached: paused, epoch })
   const views = { ...hooks, actions, useFrame, useSidebarPref: useHiddenSidebar, workspace }
   useDeckTheme(status.uiTheme, roster.prefs)
   useEffect(() => team.start(), [team])
@@ -98,16 +101,15 @@ export function App() {
     }
     const id = roster.byId[roster.mainBotId]?.id ?? roster.bots?.[0]?.id ?? roster.rooms?.[0]?.id
     if (id) actions.openSession(id)
-  }, [roster.ready, roster.revision, shown, actions, status.cached, feedLost])
+  }, [roster.ready, roster.revision, shown, actions, paused])
   useEffect(() => {
     const target = shown ? targetOf(roster, shown) : null
     if (target) bridge.selected(target.kind, target.id)
   }, [shown, roster.revision])
-  const cached = status.cached || feedLost
   useEffect(() => {
-    document.body.toggleAttribute('data-deck-cached', cached)
+    document.body.toggleAttribute('data-deck-cached', paused)
     return () => document.body.removeAttribute('data-deck-cached')
-  }, [cached])
+  }, [paused])
   useEffect(() => {
     document.body.toggleAttribute('data-deck-background', status.localBackground === true)
     return () => document.body.removeAttribute('data-deck-background')
@@ -118,9 +120,9 @@ export function App() {
   }
   const visibleShown = shown && (roster.byId[shown] || roster.roomsById[shown]) ? shown : null
   if (!localeReady) return null
-  return h(ResourceContext.Provider, { value: { roster, cached, mode: status.mode, epoch: resourceEpoch, selection: shown, actions, openWorkspace } }, h('div', { className: 'deck-remote-frame' },
+  return h(ResourceContext.Provider, { value: { roster, cached: paused, mode: status.mode, epoch, selection: shown, actions, openWorkspace } }, h('div', { className: 'deck-remote-frame' },
     cached ? h('div', { className: 'deck-cache-banner', role: 'status' }, `${status.alias} · 缓存 · 完成状态待确认`, status.error ? h('span', null, status.error) : null) : null,
-    h('fieldset', { className: 'deck-remote-controls', disabled: cached },
+    h('fieldset', { className: 'deck-remote-controls', disabled: paused },
       h('main', { className: 'dsb-main dsb_centerCol' },
         h('div', { className: 'dsb-band' }),
         visibleShown ? h(Fragment, { key: visibleShown },

@@ -15,8 +15,17 @@ const SCOPE_EDITS = new Map([
     ["    className: 'bt-mini dsb-tool-copy',", "    className: 'bt-mini dsb-tool-copy', disabled,"],
   ]],
   ['ds-bot/src/client/settings.js', [
+    ["import { ProvidersPage } from './providers-page.js'", "import { ProvidersPage } from './providers-page.js'\nimport { ModelSettings } from '@dsbotdeck/model-settings'"],
+    ["  const advanced = resolvedPage === 'models' && id === 'advanced' && hasSection(dsh, 'models')", "  const advanced = resolvedPage === 'models' && typeof id === 'string' && (id === 'advanced' || id.startsWith('advanced:')) && hasProviders"],
+    ["advanced: hasSection(dsh, 'models') ? () => actions.openSettings('models', 'advanced') : null", "advanced: () => actions.openSettings('models', 'advanced')"],
+    ["advanced ? h('div', { className: 'bt-dsh-section' }, dsh.renderSlot('settings.section', { close }, { only: 'models' })) : null", "advanced ? h(ModelSettings, { actions, initialProvider: id.startsWith('advanced:') ? id.slice(9) : '', leaving }) : null"],
+    ["hasAdvancedModels: hasSection(dsh, 'models')", 'hasAdvancedModels: hasProviders'],
     ["pages: [['computer', 'Computer use'], ['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]", "pages: [['browser', 'Browser'], ['capabilities', 'Capabilities'], ['secrets', 'Secrets']]"],
     ["tools: 'computer', guide: 'overview'", "tools: 'capabilities', guide: 'overview'"],
+  ]],
+  ['ds-bot/src/client/providers-page.js', [
+    ["import { ChatGPTSettings } from './chatgpt-settings.js'", "import { ChatGPTSettings } from './chatgpt-settings.js'\nimport { ProviderModelActions } from '@dsbotdeck/model-settings'"],
+    ['      !isChatGPT && provider.key?.writable ? h(KeyEditor, { provider, apply, actions }) : null,', '      h(ProviderModelActions, { provider, actions }),\n      !isChatGPT && provider.key?.writable ? h(KeyEditor, { provider, apply, actions }) : null,'],
   ]],
   ['ds-bot/src/client/appearance-page.js', [
     ['function ThemeCard({ id, theme, current, dark, pick, children }) {', 'export function ThemeCard({ id, theme, current, dark, pick, children }) {'],
@@ -142,6 +151,20 @@ export function paintSource(source, id, root) {
     return "import { preferInputStatus } from '@dsbotdeck/tool-model'\n" + source
   }
   if (name === 'ds-bot/src/client/cells.js') {
+    source = replaceOnce(source, "import { mdLabels, t } from './i18n.js'", "import { language, mdLabels, t } from './i18n.js'")
+    // 已读取的聊天沿用原消息时间；待发送行未开启 clock，不把本机暂记时间当服务器回执。
+    source = replaceOnce(source,
+      '    const shown = chatRow(row, key, { sessionId, selfId, roster, actions, useUi, openFile, onBtwDelete, renderUserAttachments, renderUserText })',
+      '    const shown = chatRow(row, key, { sessionId, selfId, roster, actions, useUi, openFile, onBtwDelete, renderUserAttachments, renderUserText, showTime: clock })')
+    source = replaceOnce(source,
+      'function chatRow(row, key, { sessionId, selfId, roster, actions, useUi, openFile, onBtwDelete, renderUserAttachments, renderUserText }) {',
+      'function chatRow(row, key, { sessionId, selfId, roster, actions, useUi, openFile, onBtwDelete, renderUserAttachments, renderUserText, showTime = false }) {')
+    source = replaceOnce(source,
+      "    case 'user': return h(EarlierUser, { key, row, sessionId, roster, actions, renderUserAttachments, renderUserText })",
+      "    case 'user': return h(EarlierUser, { key, row, sessionId, roster, actions, renderUserAttachments, renderUserText, showTime })")
+    source = replaceOnce(source,
+      "      const bubbles = h(Bubbles, { key, texts: row.texts, roster, selfId, actions, sessionId: useUi ? sessionId : undefined, msgKey: useUi ? `${sessionId}:${row.time}` : undefined, useUi, fold: FOLD_HUGE, textInteractionSource: true })\n      const speaker = layoutOf(roster.prefs) === 'flat' ? roster.byId[selfId] : undefined",
+      "      const speaker = layoutOf(roster.prefs) === 'flat' ? roster.byId[selfId] : undefined\n      const bubbles = h(Bubbles, { key, texts: row.texts, roster, selfId, actions, sessionId: useUi ? sessionId : undefined, msgKey: useUi ? `${sessionId}:${row.time}` : undefined, useUi, fold: FOLD_HUGE, lang: language(), time: showTime && speaker === undefined ? row.time : undefined, textInteractionSource: true })")
     source = replaceOnce(source,
       "fileNames ? h('span', { className: 'bt-uimages', 'data-text-interaction-exclude': '' }, fileNames) : null",
       'fileNames ? h(UserAttachments, { files: row.fileRefs }) : null')
@@ -166,36 +189,68 @@ export function paintSource(source, id, root) {
   }
   if (name === 'ds-bot/src/client/bot-tasks.js') {
     source = replaceOnce(source, "import { Elapsed } from './cells.js'", "import { Elapsed, EventLine } from './cells.js'")
-    source = replaceOnce(source, 'useMemo, useRef, useState', 'useMemo, useRef, useState, useLayoutEffect')
+    source = replaceOnce(source, 'useMemo, useRef, useState', 'useMemo, useRef, useState, useLayoutEffect, useContext')
     source = replaceOnce(source, 'const [showSteps, setShowSteps] = useState(false)', 'const [showSteps, setShowSteps] = useState(true)')
     source = replaceOnce(source, 'export function TaskReaderView({ bot, task, actions }) {', 'export function TaskReaderView({ bot, task, actions, fullMessages = false }) {')
     source = replaceOnce(source, '  const scrollRef = useRef(null)', '  const scrollRef = useRef(null)\n  const toolHistory = useRef(null)\n  if (toolHistory.current === null) toolHistory.current = new ToolHistoryModel()\n  const diagnosticHistory = useRef(null)\n  if (diagnosticHistory.current === null) diagnosticHistory.current = new DiagnosticHistoryModel()')
     source = replaceOnce(source, '  }, [botId, taskId, showSteps])', '  }, [botId, taskId, showSteps, fullMessages])')
     source = replaceOnce(source, '  const canAlways = Boolean(toolApproval?.alwaysAllow) && !readOnly', '  const canAlways = false')
+    source = replaceOnce(source, '  const taskId = task?.id\n  const active = isActiveTask(task)', `  const taskId = task?.id
+  const active = isActiveTask(task)
+  const { cached, epoch } = useContext(ResourceContext)
+  const deckAvailable = useRef(false); deckAvailable.current = !cached
+  const deckReadScope = useRef(null); const deckFresh = useRef(false)`)
     source = replaceOnce(source, '  const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current, { force = false } = {}) => {', `  const noteReadError = err => {
-    if (fullMessages && errorCode(err) === 'bot/refused') {
+    deckFresh.current = false
+    if (errorCode(err) === 'RPC_ABORTED') { setError(''); return }
+    if (errorCode(err) === 'bot/refused') {
       setPage(null); setOlder([]); setOlderCursor({ active: false, cursor: null })
     }
     setError(extraReadFailure(err))
   }
   const loadLatest = useCallback(async (quiet = false, gen = reqGenRef.current, { force = false } = {}) => {`)
+    source = replaceOnce(source, "    if (!botId || !taskId || typeof readTask !== 'function') return", "    if (!deckAvailable.current || !botId || !taskId || typeof readTask !== 'function') return")
+    source = replaceOnce(source, '          setPage(next)\n          setError(\'\')', '          deckFresh.current = true\n          setPage(next)\n          setError(\'\')')
     source = replaceOnce(source,
       "          setError(hostText(err?.message ?? String(err)))\n        }\n        if (mountedRef.current && !isQuiet",
       "          noteReadError(err)\n        }\n        if (mountedRef.current && !isQuiet")
     source = replaceOnce(source,
       "      setError(hostText(err?.message ?? String(err)))\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)",
       "      noteReadError(err)\n    } finally {\n      if (mountedRef.current && gen === reqGenRef.current) setLoadingMore(false)")
-    source = replaceOnce(source, '  useEffect(() => {\n    reqGenRef.current += 1', '  // 权限或目标变化在绘制前清旧页，迟到回包沿用原代次检查。\n  useLayoutEffect(() => {\n    setLoadingMore(false)\n    reqGenRef.current += 1')
+    source = replaceOnce(source, `  useEffect(() => {
+    reqGenRef.current += 1
+    inFlightRef.current = false
+    pendingReloadRef.current = false
+    const gen = reqGenRef.current
+    setOlder([])
+    setOlderCursor({ active: false, cursor: null })
+    setPage(null)
+    void loadLatest(false, gen)
+  }, [loadLatest])`, `  // 切服只暂停读取；目标或授权范围改变才清历史，切回已结束任务也会补读。
+  useLayoutEffect(() => {
+    const scope = JSON.stringify([botId, taskId, showSteps, fullMessages])
+    const changed = deckReadScope.current !== scope
+    deckReadScope.current = scope; deckFresh.current = false
+    const gen = ++reqGenRef.current
+    inFlightRef.current = false; pendingReloadRef.current = false; setLoadingMore(false); setError('')
+    if (changed) { setPage(null); setOlder([]); setOlderCursor({ active: false, cursor: null }) }
+    if (cached) setLoading(false)
+    else void loadLatest(!changed && page !== null, gen)
+    return () => { reqGenRef.current += 1 }
+  }, [loadLatest, cached, epoch])`)
+    source = replaceOnce(source, '    if (active) {\n      wasActiveRef.current = true', '    if (active && !cached) {\n      wasActiveRef.current = true')
+    source = replaceOnce(source, '  }, [active, loadLatest])', '  }, [active, loadLatest, cached, epoch])')
+    source = replaceOnce(source, "    if (!nextCursor || loadingMore || !botId || !taskId || typeof readTask !== 'function') return", "    if (!deckAvailable.current || !nextCursor || loadingMore || !botId || !taskId || typeof readTask !== 'function') return")
     source = replaceOnce(source, '  const items = [...uniqueOlder, ...latestItems]', '  const items = [...uniqueOlder, ...latestItems]\n  const displayItems = diagnosticHistory.current.group(toolHistory.current.group(items, { sessionId: page?.sessionId, targetId: taskId }), { sessionId: page?.sessionId, targetId: JSON.stringify([botId, taskId]), fullMessages })')
     source = replaceOnce(source, ': items.map((entry, idx) => {', ': displayItems.map((entry, idx) => {')
     const toolRows = "                return h('div', { key, className: 'bt-tread-steps' },\n                  tools.map((tool, sIdx) => h('div', { key: sIdx, className: 'bt-tread-step', 'data-ok': tool.ok === false ? 'false' : undefined },\n                    h('span', { className: 'bt-tread-step-dot', 'aria-hidden': true }),\n                    h('span', { className: 'bt-tread-step-name' }, tool.label || tool.name || 'tool'))))"
     source = replaceOnce(source, toolRows, '                return h(ToolSteps, { key: toolGroupKey(entry, page?.sessionId, key), entry, scope: { botId, taskId, sessionId: page?.sessionId }, fullMessages })')
     source = replaceOnce(source, "              if (entry.kind === 'steps') {", "              if (entry.kind === 'internal' || entry.kind === 'diagnostic') return h(MessageNote, { key: entry.deckDiagnosticGroupKey ?? key, item: entry, EventLine })\n              if (entry.kind === 'steps') {")
     const anchor = '  const nextCursor = olderCursor.active ? olderCursor.cursor : (page?.cursor ?? null)\n'
-    source = replaceOnce(source, anchor, `${anchor}\n  const deckNoteTaskSeen = () => {\n    if (!loading && !error && page !== null) actions.deckTaskPaint?.(botId, taskId, scrollRef.current)\n  }\n  useLayoutEffect(deckNoteTaskSeen, [page, loading, error, botId, taskId])\n`)
+    source = replaceOnce(source, anchor, `${anchor}\n  const deckNoteTaskSeen = () => {\n    if (deckAvailable.current && deckFresh.current && !loading && !error && page !== null) actions.deckTaskPaint?.(botId, taskId, scrollRef.current)\n  }\n  useLayoutEffect(deckNoteTaskSeen, [page, loading, error, botId, taskId])\n`)
     source = replaceOnce(source, "h('div', { className: 'bt-tread-scroll', ref: scrollRef },", "h('div', { className: 'bt-tread-scroll', ref: scrollRef, onScroll: deckNoteTaskSeen },")
     source = replaceOnce(source, "    error ? h('div', { className: 'bt-tread-err', role: 'alert' }, error) : null,", "    h(TaskResourceEntries, { botId, taskId, sessionId: page?.sessionId ?? task.sessionId }),\n    error ? h('div', { className: 'bt-tread-err', role: 'alert' }, error) : null,")
-    return "import { TaskResourceEntries } from '@dsbotdeck/resource-entry'\nimport { extraReadFailure } from '@dsbotdeck/extra-read'\nimport { errorCode } from '@dsbotdeck/validation'\n" + TOOL_STEPS_IMPORT + source
+    return "import { ResourceContext } from '@dsbotdeck/resource-read'\nimport { TaskResourceEntries } from '@dsbotdeck/resource-entry'\nimport { extraReadFailure } from '@dsbotdeck/extra-read'\nimport { errorCode } from '@dsbotdeck/validation'\n" + TOOL_STEPS_IMPORT + source
   }
   return null
 }

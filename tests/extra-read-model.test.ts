@@ -43,7 +43,7 @@ test('仅明确缺失当前增补端点才回退，缺失探测在本次连接�
   }
 })
 test('拒绝、锁定、网络、无代码、其他缺失和损坏回包不能降级或吞错', async () => {
-  for (const error of [new DeckError('bot/refused', 'extra-messages'), new DeckError('bot/unavailable', 'extra-messages'), new DeckError('RPC_TIMEOUT', 'extra-messages'), new DeckError('bot/not-found', 'Unknown Bot'), new DeckError('bot/not-found', 'extra-messages session not found'), new DeckError('bot/not-found', 'Unknown endpoint extra-messages-other'), new DeckError('bot/not-found', 'Unknown endpoint extra-task-read'), new Error('extra-messages')]) {
+  for (const error of [new DeckError('bot/refused', 'extra-messages'), new DeckError('bot/unavailable', 'extra-messages'), new DeckError('RPC_ABORTED', 'extra-messages'), new DeckError('RPC_TIMEOUT', 'extra-messages'), new DeckError('bot/not-found', 'Unknown Bot'), new DeckError('bot/not-found', 'extra-messages session not found'), new DeckError('bot/not-found', 'Unknown endpoint extra-messages-other'), new DeckError('bot/not-found', 'Unknown endpoint extra-task-read'), new Error('extra-messages')]) {
     let fallback = false
     await assert.rejects(readExtraPage(async () => { throw error }, 'extra-messages', {}, async () => { fallback = true; return { items: [] } }))
     assert.equal(fallback, false)

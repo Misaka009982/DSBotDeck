@@ -260,7 +260,9 @@ test('标准入口不装配 Windows Hello，仍使用真实请求门禁', async 
 })
 test('私聊审批保留原输入框，缓存仍由父级禁用并限高滚动', async () => {
   const remote = await source('remote/app.js'); const css = await source('remote/remote.css')
-  assert.ok(remote.includes('disabled: cached'))
+  assert.ok(remote.includes('disabled: paused'))
+  assert.ok(remote.includes('const paused = cached || status.active !== true'))
+  assert.ok(remote.includes('status.viewEpoch ?? 0'))
   assert.ok(css.includes('.deck-chat-approvals'))
   assert.ok(css.includes('max-height:min(280px,35dvh)')); assert.ok(css.includes('overflow:auto'))
 })

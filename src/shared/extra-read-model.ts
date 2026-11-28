@@ -8,6 +8,7 @@ const missing = new WeakMap<ExtraReadCall, Set<ExtraReadEndpoint>>()
 export function resetExtraReads(call: ExtraReadCall): void { missing.delete(call) }
 export function extraReadFailure(value: unknown): string {
   switch (errorCode(value)) {
+    case 'RPC_ABORTED': return '界面已切换或读取已取消，保留缓存；返回会话后重新同步。'
     case 'bot/refused': return '服务器拒绝读取该会话，请检查当前设备授权；没有降级到其他接口。'
     case 'bot/read-only': return '当前为缓存，恢复连接后可重新读取会话。'
     case 'bot/unavailable': return '会话读取锁定、繁忙或暂不可用，请稍后重试。'

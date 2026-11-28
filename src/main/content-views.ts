@@ -16,7 +16,6 @@ interface Entry {
   ready: boolean
   failed: boolean
   drafts: boolean
-  usedAt: number
   pending: ContentCommand | null
   receipts: Map<string, ReadReceipt>
 }
@@ -36,8 +35,9 @@ export class ContentViews {
   constructor(window: BrowserWindow, manager: ServerManager, dist: string, gate: RequestGate, report: (message: string | null) => void, localBackground: () => boolean = () => false) {
     this.window = window; this.manager = manager; this.dist = dist; this.gate = gate; this.report = report; this.localBackground = localBackground
     manager.setNavigation((id, packet) => this.navigate(id, packet))
-    window.on('hide', () => { this.activation += 1 })
-    window.on('minimize', () => { this.activation += 1 })
+    window.on('hide', () => { this.activation += 1; this.sync() })
+    window.on('minimize', () => { this.activation += 1; this.sync() })
+    window.on('restore', () => this.sync())
   }
   active(id: string): boolean {
     const entry = this.entries.get(id)
@@ -66,7 +66,7 @@ export class ContentViews {
       nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, webviewTag: false,
     } })
     view.setBackgroundColor('#00000000')
-    const entry: Entry = { instance: randomUUID(), view, ready: false, failed: false, drafts: false, usedAt: Date.now(), pending: null, receipts: new Map() }
+    const entry: Entry = { instance: randomUUID(), view, ready: false, failed: false, drafts: false, pending: null, receipts: new Map() }
     this.entries.set(id, entry)
     this.window.contentView.addChildView(view)
     view.setVisible(false)
@@ -95,33 +95,24 @@ export class ContentViews {
   private status(id: string): ContentStatus {
     const server = this.manager.connection(id).view()
     const appearance = this.manager.appearanceSettings()
-    return { mode: server.mode, cached: server.cached, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt, localBackground: this.localBackground(), uiLanguage: appearance.language, uiTheme: { theme: appearance.theme, themeMode: appearance.themeMode } }
+    return { mode: server.mode, cached: server.cached, active: this.active(id), viewEpoch: this.activation, state: server.state, alias: server.alias, error: server.error, lastSyncAt: server.lastSyncAt, localBackground: this.localBackground(), uiLanguage: appearance.language, uiTheme: { theme: appearance.theme, themeMode: appearance.themeMode } }
   }
   sync(): void {
     if (this.window.isDestroyed()) return
     const next = this.manager.activeServer()
     if (next !== this.current) this.activation += 1
+    this.current = next
     for (const [id, entry] of this.entries) {
       if (id !== next || this.overlay || entry.failed) entry.view.setVisible(false)
       if (entry.ready && !entry.view.webContents.isDestroyed()) {
         try { entry.view.webContents.send('deck:content-status', this.status(id)) } catch {}
       }
     }
-    this.current = next
     if (next === null || this.overlay) return
     const entry = this.entries.get(next) ?? this.create(next)
-    entry.usedAt = Date.now()
-    if (!entry.failed) { entry.view.setBounds(this.rectangle); entry.view.setVisible(true); this.report(null) }
+    if (!entry.failed) { entry.view.setBounds(this.rectangle); entry.view.setVisible(this.active(next)); this.report(null) }
     else this.report('此服务器的界面暂不可用，请显式重新打开界面。')
-    this.trim()
-  }
-  private trim(): void {
-    if (this.entries.size <= 2) return
-    const candidates = [...this.entries.entries()].filter(([id, entry]) => id !== this.current && !entry.drafts).sort((a, b) => a[1].usedAt - b[1].usedAt)
-    while (this.entries.size > 2 && candidates.length > 0) {
-      const candidate = candidates.shift()
-      if (candidate) this.remove(candidate[0])
-    }
+    // 已打开页面随服务器保留；后台暂停正文读取，不按最近两页淘汰会话与草稿。
   }
   viewport(value: unknown): void {
     const data = record(value)
@@ -166,7 +157,7 @@ export class ContentViews {
     const before = this.manager.currentSelection()
     this.manager.noteSelection(owned[0], value)
     const after = this.manager.currentSelection()
-    if (before?.serverId !== after?.serverId || before?.kind !== after?.kind || before?.id !== after?.id) this.activation += 1
+    if (before?.serverId !== after?.serverId || before?.kind !== after?.kind || before?.id !== after?.id) { this.activation += 1; this.sync() }
   }
   viewed(event: IpcMainEvent, value: unknown): void {
     const owned = this.owner(event); const data = record(value)

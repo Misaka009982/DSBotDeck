@@ -124,7 +124,7 @@ export interface Snapshot {
   startupError: string | null
 }
 export type ContentCommand = { action: 'chat'; kind: EntityKind; id: string } | { action: 'settings'; page?: string; id?: string } | { action: 'new-bot' | 'new-room' }
-export interface ContentStatus { mode?: 'phone' | 'browser'; cached: boolean; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null; localBackground?: boolean; uiLanguage?: UiLanguage; uiTheme?: ThemeSettings }
+export interface ContentStatus { mode?: 'phone' | 'browser'; cached: boolean; active?: boolean; viewEpoch?: number; state: LinkState; alias: string; error: string | null; lastSyncAt: number | null; localBackground?: boolean; uiLanguage?: UiLanguage; uiTheme?: ThemeSettings }
 export const emptyCounts = (): Counts => ({ green: 0, yellow: 0, red: 0, blue: 0 })
 export const entityKey = (kind: EntityKind, id: string): string => `${kind}:${id}`
 export const defaultClient = (): SavedClient => ({

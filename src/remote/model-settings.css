@@ -1,0 +1,10 @@
+/* 模型表单沿用原设置控件，仅补字段排列与窄窗口换行。 */
+.deck-model-settings{display:flex;flex-direction:column;gap:12px;min-width:0}
+.deck-model-settings h3{margin:0;font-size:14px}
+.deck-model-settings .bt-provider-models-head{flex-wrap:wrap}
+.deck-model-fields{display:flex;flex-direction:column;gap:12px;min-width:0;margin:0;padding:0;border:0}
+.deck-model-fields:disabled{opacity:.65}
+.deck-model-field{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;color:var(--bt-ink-2)}
+.deck-model-field .bt-input{width:100%;min-width:0;box-sizing:border-box}
+.deck-model-settings .bt-set-hint{margin:0;overflow-wrap:anywhere}
+@media(max-width:600px){.deck-model-settings .bt-provider-pair{grid-template-columns:minmax(0,1fr)}}

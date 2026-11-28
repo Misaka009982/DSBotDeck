@@ -27,6 +27,8 @@ src/remote/tool-steps.js、tool-detail.js 与纯呈现模型独立实现气泡�
 ToolCardShell/CodeSection，历史与保存差异复用 computeLineDiff/DiffFileView，
 委派导航复用 SubagentLineageBar/SubagentReadOnlyBar。
 不复制增补工作树或不可用的 Agents 组件，不执行记录里的命令。
+src/remote/model-settings.js 独立适配服务商模型的远程读写，入口复用原
+SettingsDialog/ProvidersPage，选择与表单样式复用 SelectMenu 和原设置样式。
 src/remote/private-goal.js 独立适配已核对的私聊目标协议，在原 Bot 设置
 Card 中显示目标和控制，由当前私聊的 /goal 按需打开；目标仍由服务器执行。
 src/remote/peer-event.js 只适配服务器公开来源；原交换和详情仍由上游组件显示。

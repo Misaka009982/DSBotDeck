@@ -90,12 +90,12 @@ export function Chat({ sessionId, team }) {
     else if (follow.current) node.scrollTop = node.scrollHeight
   }, [view.items, stream, pending, running, question, approvalKey, roster.learning, roster.learningSettled])
   useLayoutEffect(() => {
-    if (!view.loading && !view.failed && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)
-  }, [view.items, view.loading, view.failed, view.sessionId])
+    if (!view.loading && !view.failed && !view.stale && view.sessionId !== null) team.deckPaint?.(bot?.id, room?.id, scroller.current)
+  }, [view.items, view.loading, view.failed, view.stale, view.sessionId])
   const onScroll = () => {
     const node = scroller.current
     follow.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80
-    if (follow.current && !view.loading && !view.failed) team.deckPaint?.(bot?.id, room?.id, node)
+    if (follow.current && !view.loading && !view.failed && !view.stale) team.deckPaint?.(bot?.id, room?.id, node)
   }
   const earlier = view.loading && view.sessionId !== null ? h(Shimmer, null, t('Loading earlier messages…'))
     : view.failed ? h('button', { type: 'button', className: 'bt-soft', onClick: () => load(failure?.cursor, scroller.current) }, t('Couldn’t load earlier messages · Retry'))
@@ -105,11 +105,13 @@ export function Chat({ sessionId, team }) {
     h('div', { ref: scroller, className: 'dsb-scroll', 'data-conversation-scroll': '', onScroll },
       h('div', { className: 'dsb-column' },
         failure ? h('p', { className: 'deck-chat-read-error', role: 'alert' }, failure.message) : null,
+        view.stale && !context.cached && view.items.length ? h('p', { className: 'bt-hint', role: 'status' }, view.loading ? '连接已恢复，正在核对消息；当前仍显示缓存。' : '消息尚未同步，当前显示上次读取的缓存。') : null,
         earlier ? h('div', { className: 'bt-earlier-top' }, earlier) : null,
         h('div', { className: 'dsb-flow', 'data-chat-flow': '', role: 'feed', 'aria-label': name, 'aria-busy': view.loading },
           h(ChatRows, { items: historyItems, sessionId, roster, actions, useUi: hooks.useUi, clock: true }),
-          pending.length ? h('div', { className: 'dsb-pending' }, h(ChatRows, { items: pending, sessionId, roster, actions })) : null,
-          stream?.text ? h(Bubbles, { texts: [stream.text], roster, selfId: bot?.id, actions, streaming: true, sessionId }) : null,
+          pending.length ? h('div', { className: 'dsb-pending' }, h(ChatRows, { items: pending, sessionId, roster, actions }), h('p', { className: 'bt-hint', role: 'status' }, '消息发送结果待确认。')) : null,
+          stream?.text ? h(Bubbles, { texts: [stream.text], roster, selfId: bot?.id, actions, streaming: !context.cached && !stream.paused, sessionId }) : null,
+          stream?.text && stream.paused ? h('p', { className: 'bt-hint', role: 'status' }, '连接中断，以上回复尚未接收完整；恢复后核对服务器记录。') : null,
           h('div', { 'data-chat-running': '' }),
           question ? h(PendingQuestion, { key: JSON.stringify([sessionId, question.id]), sessionId, question, actions, inline: true, enterToSend: sendsOnEnter(roster.prefs) }) : null,
           h(LearningCards, { sessionId })))),

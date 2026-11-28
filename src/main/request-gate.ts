@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { ServerView } from '../shared/domain.ts'
-import { EXTRA_OPERATIONS, EXTRA_WRITES, backgroundRead, computerControl, endpointPolicy, openingRead } from '../shared/endpoint-policy.ts'
+import { EXTRA_OPERATIONS, EXTRA_READS, EXTRA_WRITES, backgroundRead, computerControl, endpointPolicy, openingRead } from '../shared/endpoint-policy.ts'
 import { DeckError, frozenRequest } from '../shared/validation.ts'
 import type { ConnectionToken } from './server-connection.ts'
 export interface UnlockRequest { serverAlias: string; endpoint: string; allowed?: () => boolean }
@@ -30,17 +30,22 @@ export class RequestGate {
     }
     const token = connection.token()
     const learningWrite = request.endpoint === 'learning-answer'
+    // 本地取消读取不是设备撤权；写操作保留原有未发送与结果未知的区分。
+    const canceled = EXTRA_READS.has(request.endpoint) || backgroundRead(request.endpoint) ? 'RPC_ABORTED' : 'bot/refused'
     let sent = false
     const check = () => {
       const unknown = sent && (EXTRA_WRITES.has(request.endpoint) || learningWrite)
       if (learningWrite && !(connection.learningApproval?.() ?? server.mode === 'phone')) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '学习审批授权已变化，已提交结果待确认；未自动重发。' : '学习审批授权已撤销，未发送操作。')
-      if (context.signal?.aborted) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '请求已取消，服务器可能已执行，结果待确认；未自动重发。' : '请求已取消，未自动重发。')
+      if (context.signal?.aborted) throw new DeckError(unknown ? 'bot/outcome-unknown' : canceled, unknown ? '请求已取消，服务器可能已执行，结果待确认；未自动重发。' : '请求已取消，未自动重发。')
       if (!token || !connection.valid(token, !openingRead(request.endpoint))) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/read-only', unknown ? '连接或状态已变化，操作结果待确认；未自动重发。' : '连接或状态已变化，当前为缓存，操作未发送。')
-      if ((!backgroundRead(request.endpoint) || policy === 'unlock') && !context.active()) throw new DeckError(unknown ? 'bot/outcome-unknown' : 'bot/refused', unknown ? '原服务器界面已切换或隐藏，操作结果待确认；未自动重发。' : '原服务器界面已切换或隐藏，操作未发送。')
+      if ((!backgroundRead(request.endpoint) || policy === 'unlock') && !context.active()) {
+        const message = sent ? '原服务器界面已切换或隐藏，读取结果未交付。' : '原服务器界面已切换或隐藏，操作未发送。'
+        throw new DeckError(unknown ? 'bot/outcome-unknown' : canceled, unknown ? '原服务器界面已切换或隐藏，操作结果待确认；未自动重发。' : message)
+      }
     }
     check()
     if (policy === 'unlock' && this.unlock) {
-      if (!context.active()) throw new DeckError('bot/refused', '请在活动服务器界面操作。')
+      if (!context.active()) throw new DeckError(canceled, '请在活动服务器界面操作。')
       const verified = await this.unlock.verify({ serverAlias: server.alias, endpoint: request.endpoint, allowed: () => !context.signal?.aborted && context.active() && token !== null && connection.valid(token) })
       if (!verified) throw new DeckError('bot/refused', '系统验证已取消或不可用，未发送敏感操作。请先配置 Windows Hello。')
     }

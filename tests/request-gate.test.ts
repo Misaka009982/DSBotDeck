@@ -28,7 +28,7 @@ test('已确认增补只读端点保留浏览器边界和活动目标，不放�
     for (const endpoint of endpoints) {
       assert.equal(endpointPolicy(endpoint, mode), 'safe')
       await gate.execute(connection, endpoint, { fullMessages: false }, { active: () => true })
-      await assert.rejects(gate.execute(connection, endpoint, {}, { active: () => false }), /切换或隐藏/)
+      await assert.rejects(gate.execute(connection, endpoint, {}, { active: () => false }), { code: 'RPC_ABORTED', message: /切换或隐藏/ })
     }
     assert.equal(connection.sent.length, endpoints.length)
   }
@@ -68,11 +68,16 @@ test('增补正文已发出后切服再切回或取消，迟到正文也不能�
   assert.equal(connection.sent.length, 1)
   for (const endpoint of ['extra-delegation-list', 'extra-delegation-read', 'extra-tool-change', 'extra-workspace-open', 'extra-workspace-list', 'extra-workspace-read']) {
     const opening = epoch
-    await assert.rejects(new RequestGate().execute(connection, endpoint, {}, { active: () => epoch === opening }), /切换或隐藏/)
+    await assert.rejects(new RequestGate().execute(connection, endpoint, {}, { active: () => epoch === opening }), { code: 'RPC_ABORTED', message: /切换或隐藏/ })
   }
   const controller = new AbortController()
   connection.call = async () => { controller.abort(); return 'fictional-body' }
-  await assert.rejects(new RequestGate().execute(connection, 'extra-messages', { botId: 'bot-a' }, { active: () => true, signal: controller.signal }), /取消/)
+  await assert.rejects(new RequestGate().execute(connection, 'extra-messages', { botId: 'bot-a' }, { active: () => true, signal: controller.signal }), { code: 'RPC_ABORTED', message: /取消/ })
+})
+test('服务器真实授权拒绝仍按原错误返回，不当成本地切服取消', async () => {
+  const connection = new BoundFixture(); const refused = Object.assign(new Error('设备授权已撤销'), { code: 'bot/refused' })
+  connection.call = async () => { throw refused }
+  await assert.rejects(new RequestGate().execute(connection, 'extra-messages', { botId: 'bot-a' }, { active: () => true }), error => error === refused)
 })
 test('学习批准沿用手机配对权限，浏览器、隐藏和取消不能发送', async () => {
   const connection = new BoundFixture(); const gate = new RequestGate()
@@ -134,6 +139,19 @@ test('默认门禁只按原配对权限发送，不依赖本机 Windows Hello', 
   await assert.rejects(gate.execute(connection, 'computer-takeover', {}, { active: () => true }), /不提供远程电脑控制/)
   await assert.rejects(gate.execute(connection, 'phone-remove', {}, { active: () => true }), /必须在服务器本机/)
   assert.equal(connection.sent.length, 1)
+})
+test('模型保存保留手机配对与活动界面边界，浏览器和缓存不能修改模型', async () => {
+  const connection = new BoundFixture(); const gate = new RequestGate()
+  const payload = { provider: 'fixture-provider', revision: 3, models: [{ id: 'model-a' }, { id: 'model-b', contextWindow: 128000 }] }
+  await gate.execute(connection, 'provider-models-save', payload, { active: () => true })
+  assert.deepEqual(connection.sent, [{ endpoint: 'provider-models-save', payload }])
+  await assert.rejects(gate.execute(connection, 'provider-models-save', payload, { active: () => false }), /切换或隐藏/)
+  connection.mode = 'browser'
+  await assert.rejects(gate.execute(connection, 'provider-models-save', payload, { active: () => true }), /浏览器权限/)
+  connection.mode = 'phone'; connection.valid = () => false
+  await assert.rejects(gate.execute(connection, 'provider-models-save', payload, { active: () => true }), /当前为缓存/)
+  assert.equal(connection.sent.length, 1)
+  for (const mode of ['phone', 'browser'] as const) assert.equal(endpointPolicy('engine-settings-mutate', mode), 'denied')
 })
 test('取消额外本机验证后，缓存、取消和失效界面仍不发送', async () => {
   const connection = new BoundFixture(); const gate = new RequestGate()
